@@ -480,7 +480,7 @@ struct CPU {
 				case INS_PLP_I: {
 					Byte PLP = pullFromStack(cycles, SP, memory);
 
-    				bitset<8> bits(PLP);
+    				std::bitset<8> bits(PLP);
 
 					C = bits[0];
 					Z = bits[1];
