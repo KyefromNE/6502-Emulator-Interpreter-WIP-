@@ -251,6 +251,17 @@ struct CPU {
 		cycles--;
 	}
 
+	Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
+		SP++;
+		
+		Byte op = memory[0x0100 + SP];
+
+		memory[0x0100 + SP] = 0;
+
+		return op;
+		
+	}
+
     static constexpr Byte
         INS_LDA_IM = 0xA9,
         INS_LDA_ZP = 0xA5,
@@ -290,7 +301,9 @@ struct CPU {
         INS_TXS_I = 0x9A,
         INS_TYA_I = 0x98,
         INS_PHA_I = 0x48,
-        INS_PHP_I = 0x08;
+        INS_PHP_I = 0x08,
+		INS_PLA_I = 0x68,
+		INS_PLP_I = 0x28;
 
 
     void execute(uint32_t cycles, MEM& memory) {
@@ -441,6 +454,15 @@ struct CPU {
 				} break;
 				case INS_PHP_I: {
 					pushToStack(cycles, SP, status, memory);
+				} break;
+				case INS_PLA_I: {
+					A = pullFromStack(cycles, SP, memory);
+					setZN(A);
+				} break;
+				case INS_PLP_I: {
+					Byte PLP = pullFromStack(cycles, SP, memory);
+		
+					
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
