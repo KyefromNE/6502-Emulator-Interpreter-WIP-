@@ -1,5 +1,19 @@
 #include <cstdint>
 #include <iostream>
+#include <bitset>
+
+
+/* NOTE:
+	Some code from this repository has been copied directly from a youtube tutorial.
+
+	This was to give me a head start before using this as a project I continued to develop.
+
+	The tutorials I used will be listed here:
+
+	https://www.youtube.com/watch?v=qJgsuQoy9bc&list=PLLwK93hM93Z13TRzPx9JqTIn33feefl37
+
+	https://6502.org/users/obelisk/6502/
+*/
 
 using Byte = uint8_t;
 using Word = uint16_t;
@@ -252,12 +266,17 @@ struct CPU {
 
 	Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
 		SP++;
-		
+		cycles--;
 		Byte op = memory[0x0100 + SP];
-
+		cycles--;
 		memory[0x0100 + SP] = 0;
-
+		cycles--;
 		return op;
+		
+	}
+
+
+	void setAllFlagsFromStack(uint32_t& cycles, MEM& memory) {
 		
 	}
 
@@ -460,10 +479,17 @@ struct CPU {
 				} break;
 				case INS_PLP_I: {
 					Byte PLP = pullFromStack(cycles, SP, memory);
+
+    				bitset<8> bits(PLP);
+
+					C = bits[0];
+					Z = bits[1];
+					I = bits[2];
+					D = bits[3];
+					B = bits[5];
+					V = bits[6];
+					N = bits[7];
 					
-					/*
-						FINISH NOW
-					*/
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
