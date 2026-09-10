@@ -10,9 +10,8 @@ struct MEM {
     Byte data[MAX_MEM];
 
     void init() {
-        for (uint32_t i = 0; i < MAX_MEM; i++) {
-            data[i] = 0;
-        }
+        
+		data[MAX_MEM] = {0};
         data[0xFFFC] = 0x00;
 		data[0xFFFD] = 0x80;
         
@@ -56,7 +55,7 @@ struct CPU {
 	Byte status =
 		(N << 7) |
 		(V << 6) |
-		(1 << 5) |
+		(1 << 5) |   // has no purpose
 		(1 << 4) |   // B flag is not used here on native hardware
 		(D << 3) |
 		(I << 2) |
@@ -461,8 +460,10 @@ struct CPU {
 				} break;
 				case INS_PLP_I: {
 					Byte PLP = pullFromStack(cycles, SP, memory);
-		
 					
+					/*
+						FINISH NOW
+					*/
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
