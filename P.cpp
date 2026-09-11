@@ -13,6 +13,8 @@
 	https://www.youtube.com/watch?v=qJgsuQoy9bc&list=PLLwK93hM93Z13TRzPx9JqTIn33feefl37
 
 	https://6502.org/users/obelisk/6502/
+
+	https://csh.rit.edu/~moffitt/docs/6502.html#FLAGS
 */
 
 using Byte = uint8_t;
@@ -24,13 +26,13 @@ struct MEM {
     Byte data[MAX_MEM];
 
     void init() {
-        
+
 		data[MAX_MEM] = {0};
         data[0xFFFC] = 0x00;
 		data[0xFFFD] = 0x80;
-        
+
     }
-    
+
 
 
     Byte operator[](uint32_t address) const {
@@ -61,16 +63,16 @@ struct CPU {
     Byte Z : 1; // Zero Flag
     Byte I : 1; // Interrupt Disable
     Byte D : 1; // Decimal Mode
-    Byte B : 1; // Break Command, generate for PHP/BRK/interrupts push the status
     Byte V : 1; // Overflow Flag
     Byte N : 1; // Negative Flag
+
 
 
 	Byte status =
 		(N << 7) |
 		(V << 6) |
 		(1 << 5) |   // has no purpose
-		(1 << 4) |   // B flag is not used here on native hardware
+		(1 << 4) |   // Invisible Break flag
 		(D << 3) |
 		(I << 2) |
 		(Z << 1) |
@@ -81,13 +83,16 @@ struct CPU {
         Byte h = memory[0xFFFD];
         PC = l | (h << 8);
         SP = 0xFD;
-        C = Z = I = D = B = V = N = 0;
+        C = Z = I = D = V = N = 0;
         A = X = Y = 0;
 
     }
     Byte Fetch(uint32_t& cycles, MEM& memory) {
-        Byte Data = memory[PC];
+        // PC is where the next instruction is stored
+    	Byte Data = memory[PC];
+    	// PC is incremented, allowing the next use of PC to be the next instruction
         PC++;
+    	//
         cycles--;
         return Data;
     }
@@ -97,167 +102,167 @@ struct CPU {
         cycles--;
         return Data;
     }
-    
+
     void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
 		memory[address] = toWrite;
 		cycles--;
 	}
-    
+
     void setZN(Byte value) {
 		Z = (value == 0);
 		N = (value & 0x80) > 0;
-		
+
 	}
-	
+
 	Byte IM(uint32_t& cycles, MEM& memory) {
 		Byte value = Fetch(cycles, memory);
-		
+
 		return value;
 	}
-	
+
 	Byte ZP(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
-		
+
 		return zeroPageAddress;
 	}
-	
+
 	Byte ZPX(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
         zeroPageAddress += X;
         cycles--;
-        
+
         return zeroPageAddress;
 	}
-	
+
 	Byte ZPY(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
         zeroPageAddress += Y;
         cycles--;
-        
+
         return zeroPageAddress;
 	}
-	
+
 	Word AB(uint32_t& cycles, MEM& memory) {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
-					
+
 		Word combined = low | (high << 8);
-		
+
 		return combined;
 	}
-	
+
 	Word ABXcross(uint32_t& cycles, MEM& memory) {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
-					
+
 		Word combined = low | (high << 8);
-					
-					
+
+
 		Word add = combined + X;
-					
+
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
 			cycles--;
 		}
-		
+
 		return add;
 	}
-	
+
 	Word ABX(uint32_t& cycles, MEM& memory) {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
-					
+
 		Word combined = low | (high << 8);
-					
-					
+
+
 		Word add = combined + X;
-					
-		
-		
+
+
+
 		return add;
 	}
-	
+
 	Word ABYcross(uint32_t& cycles, MEM& memory) {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
-					
+
 		Word combined = low | (high << 8);
-					
-					
+
+
 		Word add = combined + Y;
-					
+
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
 			cycles--;
 		}
-		
+
 		return add;
 	}
-	
+
 	Word ABY(uint32_t& cycles, MEM& memory) {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
-					
+
 		Word combined = low | (high << 8);
-					
-					
+
+
 		Word add = combined + Y;
-					
-		
-		
+
+
+
 		return add;
 	}
-	
+
 	Word IDX(uint32_t& cycles, MEM& memory) {
 		Byte operand = Fetch(cycles, memory);
-					
+
 		Byte add = operand + X;
 		cycles--; //real hardware consumes a cycle here
 		Byte highadd = add + 1;
 		Byte low = read(cycles, add, memory);
 		Byte high = read(cycles, highadd, memory);
-					
+
 		Word combined = low | (high << 8);
-		
-		
+
+
 		return combined;
-					
+
 	}
-	
+
 	Word IDYcross(uint32_t& cycles, MEM& memory) {
 		Byte operand = Fetch(cycles, memory);
-		Byte highop = operand + 1; 
-				
+		Byte highop = operand + 1;
+
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
-					
+
 		Word combined = low | (high << 8);
-					
+
 		Word add = combined + Y;
-					
+
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
 			cycles--;
 		}
-		
-		
+
+
 		return add;
 	}
-	
+
 	Word IDY(uint32_t& cycles, MEM& memory) {
 		Byte operand = Fetch(cycles, memory);
-		Byte highop = operand + 1; 
-				
+		Byte highop = operand + 1;
+
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
-					
+
 		Word combined = low | (high << 8);
-					
+
 		Word add = combined + Y;
-		
-		
+
+
 		return add;
 	}
-	
+
 	void pushToStack(uint32_t& cycles, Byte& SP, Byte whatToStack, MEM& memory) {
-		//SP lives 0x0100-0x01FF
+		//SP lives 0x0100-0x01FF, since SP is initialised as 0xFD, 0x100 + 0xFD ensures it's within range of where the stack lives
 		memory[0x0100 + SP] = whatToStack;
 		cycles--;
 		SP--;
@@ -269,16 +274,11 @@ struct CPU {
 		cycles--;
 		Byte op = memory[0x0100 + SP];
 		cycles--;
-		memory[0x0100 + SP] = 0;
-		cycles--;
 		return op;
-		
+
 	}
 
 
-	void setAllFlagsFromStack(uint32_t& cycles, MEM& memory) {
-		
-	}
 
     static constexpr Byte
         INS_LDA_IM = 0xA9,
@@ -356,7 +356,7 @@ struct CPU {
 					setZN(A);
 				} break;
 				case INS_LDA_IDX: {
-					
+
 					A = read(cycles, IDX(cycles, memory), memory);
 					setZN(A);
 				} break;
@@ -388,7 +388,7 @@ struct CPU {
                     Y = IM(cycles, memory);
                     setZN(Y);
 				} break;
-				case INS_LDY_ZP: {					
+				case INS_LDY_ZP: {
 					Y = read(cycles, ZP(cycles, memory), memory);
 					setZN(Y);
 				} break;
@@ -404,7 +404,7 @@ struct CPU {
 					Y = read(cycles, ABXcross(cycles, memory), memory);
 					setZN(Y);
 				} break;
-				case INS_STA_ZP: {					
+				case INS_STA_ZP: {
 					write(cycles, ZP(cycles, memory), A, memory);
 				} break;
 				case INS_STA_ZPX: {
@@ -412,7 +412,7 @@ struct CPU {
 				} break;
 				case INS_STA_AB: {
 					write(cycles, AB(cycles, memory), A, memory);
-					
+
 				} break;
 				case INS_STA_ABX: {
 					write(cycles, ABX(cycles, memory), A, memory);
@@ -475,6 +475,7 @@ struct CPU {
 				} break;
 				case INS_PLA_I: {
 					A = pullFromStack(cycles, SP, memory);
+					cycles--;
 					setZN(A);
 				} break;
 				case INS_PLP_I: {
@@ -486,10 +487,9 @@ struct CPU {
 					Z = bits[1];
 					I = bits[2];
 					D = bits[3];
-					B = bits[5];
 					V = bits[6];
 					N = bits[7];
-					
+
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
@@ -506,11 +506,11 @@ int main() {
 
     MEM mem;
     CPU cpu;
-	
 
-	
+
+
     cpu.reset(mem);
-    
+
 	cpu.X = 0x01;
 
 	mem[0x8000] = 0xBC;
@@ -518,9 +518,9 @@ int main() {
 
 
 
-    
+
     cpu.execute(4, mem);
-    
+
     std::cout << std::hex << static_cast<int>(cpu.A) << std::endl << static_cast<int>(cpu.X) << std::endl << static_cast<int>(cpu.PC) << std::endl << static_cast<int>(cpu.Z) << std::endl << static_cast<int>(cpu.N);
 
 
