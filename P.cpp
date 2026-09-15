@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <iostream>
 #include <bitset>
+#include <iomanip>
+#include <string>
 
 
 /* NOTE:
@@ -8,13 +10,15 @@
 
 	This was to give me a head start before using this as a project I continued to develop.
 
-	The tutorials I used will be listed here:
+	The tutorials and references I am using will be listed here:
 
 	https://www.youtube.com/watch?v=qJgsuQoy9bc&list=PLLwK93hM93Z13TRzPx9JqTIn33feefl37
 
 	https://6502.org/users/obelisk/6502/
 
 	https://csh.rit.edu/~moffitt/docs/6502.html#FLAGS
+	
+	https://www.nesdev.org/wiki/
 */
 
 using Byte = uint8_t;
@@ -321,7 +325,32 @@ struct CPU {
         INS_PHA_I = 0x48,
         INS_PHP_I = 0x08,
 		INS_PLA_I = 0x68,
-		INS_PLP_I = 0x28;
+		INS_PLP_I = 0x28,
+		INS_NOP_I = 0xEA,
+		INS_AND_IM = 0x29,
+		INS_AND_ZP = 0x25,
+		INS_AND_ZPX = 0x35,
+		INS_AND_AB = 0x2D,
+		INS_AND_ABX = 0x3D,
+		INS_AND_ABY = 0x39,
+		INS_AND_IDX = 0x21,
+		INS_AND_IDY = 0x31,
+		INS_ORA_IM = 0x09,
+		INS_ORA_ZP = 0x05,
+		INS_ORA_ZPX = 0x15,
+		INS_ORA_AB = 0x0D,
+		INS_ORA_ABX = 0x1D,
+		INS_ORA_ABY = 0x19,
+		INS_ORA_IDX = 0x01,
+		INS_ORA_IDY = 0x11,
+		INS_EOR_IM = 0x49,
+		INS_EOR_ZP = 0x45,
+		INS_EOR_ZPX = 0x55,
+		INS_EOR_AB = 0x4D,
+		INS_EOR_ABX = 0x5D,
+		INS_EOR_ABY = 0x59,
+		INS_EOR_IDX = 0x41,
+		INS_EOR_IDY = 0x51;
 
 
     void execute(uint32_t cycles, MEM& memory) {
@@ -416,15 +445,18 @@ struct CPU {
 				} break;
 				case INS_STA_ABX: {
 					write(cycles, ABX(cycles, memory), A, memory);
+					cycles--;
 				} break;
 				case INS_STA_ABY: {
 					write(cycles, ABY(cycles, memory), A, memory);
+					cycles--;
 				} break;
 				case INS_STA_IDX: {
 					write(cycles, IDX(cycles, memory), A, memory);
 				} break;
 				case INS_STA_IDY: {
 					write(cycles, IDY(cycles, memory), A, memory);
+					cycles--;
 				} break;
 				case INS_STX_ZP: {
 					write(cycles, ZP(cycles, memory), X, memory);
@@ -446,25 +478,31 @@ struct CPU {
 				} break;
 				case INS_TAX_I: {
 					X = A;
+					cycles--;
 					setZN(X);
 				} break;
 				case INS_TAY_I: {
 					Y = A;
+					cycles--;
 					setZN(Y);
 				} break;
 				case INS_TSX_I: {
 					X = SP;
+					cycles--;
 					setZN(X);
 				} break;
 				case INS_TXA_I: {
 					A = X;
+					cycles--;
 					setZN(A);
 				} break;
 				case INS_TXS_I: {
 					SP = X;
+					cycles--;
 				} break;
 				case INS_TYA_I: {
 					A = Y;
+					cycles--;
 					setZN(A);
 				} break;
 				case INS_PHA_I: {
@@ -482,17 +520,154 @@ struct CPU {
 					Byte PLP = pullFromStack(cycles, SP, memory);
 
     				std::bitset<8> bits(PLP);
-
+					
+					
 					C = bits[0];
 					Z = bits[1];
 					I = bits[2];
 					D = bits[3];
 					V = bits[6];
 					N = bits[7];
+					cycles--;
+					
 
+				} break;
+				case INS_NOP_I: {
+					// No operation
+					cycles--;
+				} break;
+				case INS_AND_IM: {
+					Byte comp = IM(cycles, memory);
+					
+					A = comp & A;
+					
+					setZN(A);
+				} break;
+				case INS_AND_ZP: {
+					Byte comp = read(cycles, ZP(cycles, memory), memory);
+
+					
+					A = comp & A;
+
+					setZN(A);
+				} break;
+				case INS_AND_ZPX: {
+					Byte comp = read(cycles, ZPX(cycles, memory), memory);
+					
+					A = comp & A;
+
+					setZN(A);
+					
+				} break;
+				case INS_AND_AB: {
+					Byte comp = read(cycles, AB(cycles, memory), memory);
+					
+					A = comp & A;
+					
+					setZN(A);
+				} break;
+				case INS_AND_ABX: {
+					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
+					
+					A = comp & A;
+					
+					setZN(A);
+				} break;
+				case INS_AND_ABY: {
+					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
+					
+					A = comp & A;
+					
+					setZN(A);
+				} break;
+				case INS_AND_IDX: {
+					Byte comp = read(cycles, IDX(cycles, memory), memory);
+					
+					A = comp & A;
+					
+					setZN(A);
+				} break;
+				case INS_AND_IDY: {
+					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
+					
+					A = comp & A;
+
+					setZN(A);
+				} break;
+				case INS_ORA_IM: {
+					Byte comp = IM(cycles, memory);
+					
+					A = A | comp;
+					
+					setZN(A);
+				} break;
+				case INS_ORA_ZP: {
+					Byte comp = read(cycles, ZP(cycles, memory), memory);
+					
+					A = A | comp;
+
+					setZN(A);
+				} break;
+				case INS_ORA_ZPX: {
+					Byte comp = read(cycles, ZPX(cycles, memory), memory);
+					
+					A = A | comp;
+
+					setZN(A);
+				} break;
+				case INS_ORA_AB: {
+					Byte comp = read(cycles, AB(cycles, memory), memory);
+					
+					A = A | comp;
+
+					setZN(A);
+				} break;
+				case INS_ORA_ABX: {
+					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
+					
+					A = A | comp;
+					
+					setZN(A);
+				} break;
+				case INS_ORA_ABY: {
+					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
+					
+					A = A | comp;
+					
+					setZN(A);
+				} break;
+				case INS_ORA_IDX: {
+					Byte comp = read(cycles, IDX(cycles, memory), memory);
+					
+					A = A | comp;
+					
+					setZN(A);
+				} break;
+				case INS_ORA_IDY: {
+					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
+					
+					A = A | comp;
+
+					setZN(A);
+				} break;
+				case INS_EOR_IM: {
+					A = A ^ IM(cycles, memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_ZP: {
+					A = A ^ read(cycles, ZP(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_ZPX: {
+					A = A ^ read(cycles, ZP(cycles, memory), memory);
+					
+					setZN(A);
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
+                    cycles = 0;
                 } break;
 
 
