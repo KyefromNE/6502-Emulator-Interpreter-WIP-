@@ -904,7 +904,7 @@ struct CPU {
 					
 					cycles--;
 					
-					std::bitset bits(temp);
+					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
@@ -920,7 +920,7 @@ struct CPU {
 					
 					cycles--;
 					
-					std::bitset bits(temp);
+					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
