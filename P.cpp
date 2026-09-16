@@ -661,7 +661,7 @@ struct CPU {
 					setZN(A);
 				} break;
 				case INS_EOR_ZPX: {
-					A = A ^ read(cycles, ZP(cycles, memory), memory);
+					A = A ^ read(cycles, ZPX(cycles, memory), memory);
 					
 					setZN(A);
 				} break;
