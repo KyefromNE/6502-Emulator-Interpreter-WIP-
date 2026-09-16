@@ -19,6 +19,8 @@
 	https://csh.rit.edu/~moffitt/docs/6502.html#FLAGS
 	
 	https://www.nesdev.org/wiki/
+	
+	https://markjames.dev/blog/6502-jump-indirect-bug
 */
 
 using Byte = uint8_t;
@@ -350,7 +352,21 @@ struct CPU {
 		INS_EOR_ABX = 0x5D,
 		INS_EOR_ABY = 0x59,
 		INS_EOR_IDX = 0x41,
-		INS_EOR_IDY = 0x51;
+		INS_EOR_IDY = 0x51,
+		INS_BIT_ZP = 0x24,
+		INS_BIT_AB = 0x2C,
+		INS_JMP_AB = 0x4C,
+		INS_JMP_IND = 0x6C,			// How unique
+		INS_ASL_A = 0x0A,
+		INS_ASL_ZP = 0x06,
+		INS_ASL_ZPX = 0x16,
+		INS_ASL_AB = 0x0E,
+		INS_ASL_ABX = 0x1E,
+		INS_LSR_A = 0x4A,
+		INS_LSR_ZP = 0x46,
+		INS_LSR_ZPX = 0x56,
+		INS_LSR_AB = 0x4E,
+		INS_LSR_ABX = 0x5E;
 
 
     void execute(uint32_t cycles, MEM& memory) {
@@ -664,6 +680,254 @@ struct CPU {
 					A = A ^ read(cycles, ZPX(cycles, memory), memory);
 					
 					setZN(A);
+				} break;
+				case INS_EOR_AB: {
+					A = A ^ read(cycles, AB(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_ABX: {
+					A = A ^ read(cycles, ABXcross(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_ABY: {
+					A = A ^ read(cycles, ABYcross(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_IDX: {
+					A = A ^ read(cycles, IDX(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_EOR_IDY: {
+					A = A ^ read(cycles, IDYcross(cycles, memory), memory);
+					
+					setZN(A);
+				} break;
+				case INS_BIT_ZP: {
+					Byte result = read(cycles, ZP(cycles, memory), memory);
+					
+					std::bitset<8> bits(result);
+					
+					N = bits[1];
+					V = bits[2];
+					Z = (result == 0);
+				} break;
+				case INS_BIT_AB: {
+					Byte result = read(cycles, AB(cycles, memory), memory);
+					
+					std::bitset<8> bits(result);
+					
+					N = bits[1];
+					V = bits[2];
+					Z = (result == 0);
+				} break;
+				case INS_JMP_AB: {	
+					
+					Word set = AB(cycles, memory);
+					
+					
+					PC = set;
+					
+					
+				} break;
+				case INS_JMP_IND: {
+					
+					Byte low = Fetch(cycles, memory);
+					Byte high = Fetch(cycles, memory);
+					
+					Word add = (high << 8) | low;
+					
+					Byte PClow = read(cycles, add, memory);
+					
+					Byte PChigh;
+					
+					if ((add & 0xFF) == 0xFF) {
+						// Emulated bug, to fix: 0x0100 | add
+						PChigh = read(cycles, (add & 0xFF00), memory);
+					} else {
+						PChigh = read(cycles, add + 1, memory);
+					}
+					
+					PC = (PChigh << 8) | PClow;
+					
+				} break;
+				case INS_ASL_A: {
+					std::bitset<8> bits(A);
+					
+					C = bits[7];
+					
+					A = A << 1;
+					
+					cycles--;
+					
+					std::bitset<8> resbits(A);
+					
+					N = resbits[7];
+					Z = (A == 0);
+					
+				} break;
+				case INS_ASL_ZP: {
+					Byte temp = ZP(cycles, memory);
+					
+					Byte value = temp << 1;
+					
+					cycles--;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[7];
+		
+					
+					cycles--;
+					
+					std::bitset<8> resbits(value);
+					
+					cycles--;
+					
+					N = resbits[7];
+					Z = (value == 0);
+				} break;
+				case INS_ASL_ZPX: {
+					Byte temp = ZPX(cycles, memory);
+					
+					Byte value = temp << 1;
+					
+					cycles--;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[7];
+					
+					cycles--;
+					
+					std::bitset<8> resbits(value);
+					
+					cycles--;
+					
+					N = resbits[7];
+					Z = (value == 0);
+				} break;
+				case INS_ASL_AB: {
+					Byte temp = AB(cycles, memory);
+					
+					Byte value = temp << 1;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[7];
+					
+					cycles--;
+					
+					value = value << 1;
+					
+					cycles--;
+					
+					std::bitset<8> resbits(value);
+					
+					cycles--;
+					
+					N = resbits[7];
+					Z = (value == 0);
+				} break;
+				case INS_ASL_ABX: {
+					Byte temp = ABX(cycles, memory);
+					
+					Byte value = temp << 1;
+					
+					cycles--;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[7];
+					
+					cycles--;
+					
+					std::bitset<8> resbits(value);
+					
+					cycles--;
+					
+					N = resbits[7];
+					Z = (value == 0);
+				} break;
+				case INS_LSR_A: {
+					std::bitset<8> bits(A);
+					
+					C = bits[0];
+					
+					cycles--;
+					
+					A = A >> 1;
+					
+					N = 0;
+					Z = (A == 0);
+				} break;
+				case INS_LSR_ZP: {
+					Byte temp = ZP(cycles, memory);
+					
+					Byte value = temp >> 1;
+					
+					cycles--;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[0];
+					
+					cycles--;
+					
+					
+					N = 0;
+					Z = (value == 0);
+				} break;
+				case INS_LSR_ZPX: {
+					Byte temp = ZPX(cycles, memory);
+					
+					Byte value = temp >> 1;
+					
+					cycles--;
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[0];
+					
+					cycles--;
+					
+					N = 0;
+					Z = (value == 0);
+				} break;
+				case INS_LSR_AB: {
+					Byte temp = AB(cycles, memory);
+					
+					Byte value = temp >> 1;
+					
+					cycles--;
+					
+					std::bitset bits(temp);
+					
+					C = bits[0];
+					
+					cycles--;
+					
+					N = 0;
+					Z = (value == 0);
+				} break;
+				case INS_LSR_ABX: {
+					Byte temp = ABX(cycles, memory);
+					
+					Byte value = temp >> 1;
+					
+					cycles--;
+					
+					std::bitset bits(temp);
+					
+					C = bits[0];
+					
+					cycles--;
+					
+					N = 0;
+					Z = (value == 0);
 				} break;
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
