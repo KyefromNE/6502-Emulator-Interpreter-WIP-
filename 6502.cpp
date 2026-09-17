@@ -754,6 +754,7 @@ struct CPU {
 					PC = (PChigh << 8) | PClow;
 					
 				} break;
+				/*
 				case INS_ASL_A: {
 					std::bitset<8> bits(A);
 					
@@ -929,6 +930,8 @@ struct CPU {
 					N = 0;
 					Z = (value == 0);
 				} break;
+				implemented wrong, will fix 
+				*/
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
                     cycles = 0;
