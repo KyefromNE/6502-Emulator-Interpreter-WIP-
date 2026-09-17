@@ -33,9 +33,15 @@ NOP
 
 # Unsure about completion
 
+
+JMP
+
+
+# Known to be not working (to be fixed)
+
 ASL
 LSR
-JMP
+
 
 # Not completed
 
