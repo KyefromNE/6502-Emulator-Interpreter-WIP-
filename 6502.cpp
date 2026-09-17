@@ -23,6 +23,11 @@
 	https://markjames.dev/blog/6502-jump-indirect-bug
 */
 
+/* NOTE:
+ * 
+ * AB/ID functions are WORD functions
+ * 
+ */
 using Byte = uint8_t;
 using Word = uint16_t;
 
@@ -366,7 +371,12 @@ struct CPU {
 		INS_LSR_ZP = 0x46,
 		INS_LSR_ZPX = 0x56,
 		INS_LSR_AB = 0x4E,
-		INS_LSR_ABX = 0x5E;
+		INS_LSR_ABX = 0x5E,
+		INS_ROL_A = 0x2A,
+		INS_ROL_ZP = 0x26,
+		INS_ROL_ZPX = 0x36,
+		INS_ROL_AB = 0x2E,
+		INS_ROL_ABX = 0x3E;
 
 
     void execute(uint32_t cycles, MEM& memory) {
@@ -754,7 +764,6 @@ struct CPU {
 					PC = (PChigh << 8) | PClow;
 					
 				} break;
-				/*
 				case INS_ASL_A: {
 					std::bitset<8> bits(A);
 					
@@ -771,167 +780,241 @@ struct CPU {
 					
 				} break;
 				case INS_ASL_ZP: {
-					Byte temp = ZP(cycles, memory);
 					
-					Byte value = temp << 1;
+					Byte address = ZP(cycles, memory);
 					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[7];
-		
 					
-					cycles--;
+					Byte shift = temp << 1;
 					
-					std::bitset<8> resbits(value);
+					write(cycles, address, shift, memory);
 					
-					cycles--;
+					std::bitset<8> resbits(shift);
 					
 					N = resbits[7];
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
+					
+					
 				} break;
 				case INS_ASL_ZPX: {
-					Byte temp = ZPX(cycles, memory);
 					
-					Byte value = temp << 1;
+					Byte address = ZPX(cycles, memory);
 					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[7];
 					
-					cycles--;
+					Byte shift = temp << 1;
 					
-					std::bitset<8> resbits(value);
+					write(cycles, address, shift, memory);
 					
-					cycles--;
+					std::bitset<8> resbits(shift);
 					
 					N = resbits[7];
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
 				} break;
 				case INS_ASL_AB: {
-					Byte temp = AB(cycles, memory);
+					Word address = AB(cycles, memory);
 					
-					Byte value = temp << 1;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[7];
 					
-					cycles--;
+					Byte shift = temp << 1;
 					
-					value = value << 1;
+					write(cycles, address, shift, memory);
 					
-					cycles--;
-					
-					std::bitset<8> resbits(value);
-					
-					cycles--;
+					std::bitset<8> resbits(shift);
 					
 					N = resbits[7];
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
 				} break;
 				case INS_ASL_ABX: {
-					Byte temp = ABX(cycles, memory);
+					Word address = ABX(cycles, memory);
 					
-					Byte value = temp << 1;
-					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[7];
 					
-					cycles--;
+					Byte shift = temp << 1;
 					
-					std::bitset<8> resbits(value);
+					write(cycles, address, shift, memory);
 					
-					cycles--;
+					std::bitset<8> resbits(shift);
 					
 					N = resbits[7];
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
 				} break;
 				case INS_LSR_A: {
 					std::bitset<8> bits(A);
 					
 					C = bits[0];
 					
-					cycles--;
-					
 					A = A >> 1;
 					
+					cycles--;
+					
 					N = 0;
-					Z = (A == 0);
+					Z = (A == 0); 
 				} break;
 				case INS_LSR_ZP: {
-					Byte temp = ZP(cycles, memory);
 					
-					Byte value = temp >> 1;
+					Word address = ZP(cycles, memory);
 					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
+					Byte shift = temp >> 1;
+					
 					cycles--;
 					
+					write(cycles, address, shift, memory);
+					
+					std::bitset<8> resbits(shift);
 					
 					N = 0;
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
 				} break;
 				case INS_LSR_ZPX: {
-					Byte temp = ZPX(cycles, memory);
+					Word address = ZPX(cycles, memory);
 					
-					Byte value = temp >> 1;
-					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
+					Byte shift = temp >> 1;
+					
 					cycles--;
 					
+					write(cycles, address, shift, memory);
+					
+					std::bitset<8> resbits(shift);
+					
 					N = 0;
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
 				} break;
 				case INS_LSR_AB: {
-					Byte temp = AB(cycles, memory);
+					Word address = AB(cycles, memory);
 					
-					Byte value = temp >> 1;
-					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
-					cycles--;
+					Byte shift = temp >> 1;
+					
+					write(cycles, address, shift, memory);
+					
+					std::bitset<8> resbits(shift);
 					
 					N = 0;
-					Z = (value == 0);
+					Z = (shift == 0);
 				} break;
 				case INS_LSR_ABX: {
-					Byte temp = ABX(cycles, memory);
 					
-					Byte value = temp >> 1;
+					Word address = ABX(cycles, memory);
 					
-					cycles--;
+					Byte temp = read(cycles, address, memory);
 					
 					std::bitset<8> bits(temp);
 					
 					C = bits[0];
 					
+					Byte shift = temp >> 1;
+					
 					cycles--;
 					
+					write(cycles, address, shift, memory);
+					
+					std::bitset<8> resbits(shift);
+					
 					N = 0;
-					Z = (value == 0);
+					Z = (shift == 0);
+					
+					cycles--;
+					
 				} break;
-				implemented wrong, will fix 
-				*/
+				case INS_ROL_A: {
+					std::bitset<8> bits(A);
+					
+					C = bits[7];
+					
+					A = A << 1;
+					
+					cycles--;
+					
+					std::bitset<8> resbits(A);
+					
+					resbits[0] = C;
+					
+					N = resbits[7];
+					Z = (A == 0);
+					
+				} break;
+				case INS_ROL_ZP: {
+					Word address = ZP(cycles, memory);
+					
+					Byte temp = read(cycles, address, memory);
+					
+					std::bitset<8> bits(temp);
+					
+					C = bits[7];
+					
+					
+					Byte shift = temp << 1;
+					
+					cycles--;
+					
+					std::bitset<8> resbits(shift);
+					
+					resbits[0] = C;
+					
+					for (int i = 8; i > 0; i++) {
+						std::cout << resbits[i];
+					}
+					write(cycles, address, shift, memory);
+					Z = (shift == 0);
+					N = resbits[7];
+				} break;
+                default: {
+                    std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
+                    cycles = 0;
+                } break;
+
+
+            }
+        }
+    }
+
+};
                 default: {
                     std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
                     cycles = 0;
