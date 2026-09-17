@@ -1015,17 +1015,6 @@ struct CPU {
     }
 
 };
-                default: {
-                    std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
-                    cycles = 0;
-                } break;
-
-
-            }
-        }
-    }
-
-};
 
 int main() {
 
