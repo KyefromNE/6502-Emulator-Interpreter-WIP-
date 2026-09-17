@@ -17,65 +17,65 @@
 	https://6502.org/users/obelisk/6502/
 
 	https://csh.rit.edu/~moffitt/docs/6502.html#FLAGS
-	
+
 	https://www.nesdev.org/wiki/
-	
+
 	https://markjames.dev/blog/6502-jump-indirect-bug
 */
 
 /* NOTE:
- * 
+ *
  * AB/ID functions are WORD functions
- * 
+ *
  */
 using Byte = uint8_t;
 using Word = uint16_t;
 
 struct MEM {
-    static constexpr uint32_t MAX_MEM = 1024 * 64;
+	static constexpr uint32_t MAX_MEM = 1024 * 64;
 
-    Byte data[MAX_MEM];
+	Byte data[MAX_MEM];
 
-    void init() {
+	void init() {
 
-		data[MAX_MEM] = {0};
-        data[0xFFFC] = 0x00;
+		data[MAX_MEM - 1] = { 0 };
+		data[0xFFFC] = 0x00;
 		data[0xFFFD] = 0x80;
 
-    }
+	}
 
 
 
-    Byte operator[](uint32_t address) const {
-        return data[address];
-    }
+	Byte operator[](uint32_t address) const {
+		return data[address];
+	}
 
-    Byte& operator[](uint32_t address) {
-        return data[address];
-    }
+	Byte& operator[](uint32_t address) {
+		return data[address];
+	}
 };
 
 struct CPU {
 
 
-    // Program Counter
-    Word PC;
+	// Program Counter
+	Word PC;
 
-    // Stack Pointer
-    Byte SP;
+	// Stack Pointer
+	Byte SP = 0xFD;
 
-    // Registers
+	// Registers
 
-    Byte A, X, Y;
+	Byte A, X, Y = 0;
 
 
-    // Flags
-    Byte C : 1; // Carry Flag
-    Byte Z : 1; // Zero Flag
-    Byte I : 1; // Interrupt Disable
-    Byte D : 1; // Decimal Mode
-    Byte V : 1; // Overflow Flag
-    Byte N : 1; // Negative Flag
+	// Flags
+	Byte C : 1 = 0; // Carry Flag
+	Byte Z : 1; // Zero Flag
+	Byte I : 1; // Interrupt Disable
+	Byte D : 1; // Decimal Mode
+	Byte V : 1; // Overflow Flag
+	Byte N : 1; // Negative Flag
 
 
 
@@ -88,38 +88,38 @@ struct CPU {
 		(I << 2) |
 		(Z << 1) |
 		C;
-    void reset(MEM& memory) {
-        memory.init();
-        Byte l = memory[0xFFFC];
-        Byte h = memory[0xFFFD];
-        PC = l | (h << 8);
-        SP = 0xFD;
-        C = Z = I = D = V = N = 0;
-        A = X = Y = 0;
+	void reset(MEM& memory) {
+		memory.init();
+		Byte l = memory[0xFFFC];
+		Byte h = memory[0xFFFD];
+		PC = l | (h << 8);
+		SP = 0xFD;
+		C = Z = I = D = V = N = 0;
+		A = X = Y = 0;
 
-    }
-    Byte Fetch(uint32_t& cycles, MEM& memory) {
-        // PC is where the next instruction is stored
-    	Byte Data = memory[PC];
-    	// PC is incremented, allowing the next use of PC to be the next instruction
-        PC++;
-    	//
-        cycles--;
-        return Data;
-    }
+	}
+	Byte Fetch(uint32_t& cycles, MEM& memory) {
+		// PC is where the next instruction is stored
+		Byte Data = memory[PC];
+		// PC is incremented, allowing the next use of PC to be the next instruction
+		PC++;
+		//
+		cycles--;
+		return Data;
+	}
 
-    Byte read(uint32_t& cycles, uint32_t address, MEM& memory) {
-        Byte Data = memory[address];
-        cycles--;
-        return Data;
-    }
+	Byte read(uint32_t& cycles, uint32_t address, MEM& memory) {
+		Byte Data = memory[address];
+		cycles--;
+		return Data;
+	}
 
-    void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
+	void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
 		memory[address] = toWrite;
 		cycles--;
 	}
 
-    void setZN(Byte value) {
+	void setZN(Byte value) {
 		Z = (value == 0);
 		N = (value & 0x80) > 0;
 
@@ -139,18 +139,18 @@ struct CPU {
 
 	Byte ZPX(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
-        zeroPageAddress += X;
-        cycles--;
+		zeroPageAddress += X;
+		cycles--;
 
-        return zeroPageAddress;
+		return zeroPageAddress;
 	}
 
 	Byte ZPY(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
-        zeroPageAddress += Y;
-        cycles--;
+		zeroPageAddress += Y;
+		cycles--;
 
-        return zeroPageAddress;
+		return zeroPageAddress;
 	}
 
 	Word AB(uint32_t& cycles, MEM& memory) {
@@ -291,46 +291,46 @@ struct CPU {
 
 
 
-    static constexpr Byte
-        INS_LDA_IM = 0xA9,
-        INS_LDA_ZP = 0xA5,
-        INS_LDA_ZPX = 0xB5,
-        INS_LDA_AB = 0xAD,
-        INS_LDA_ABX = 0xBD,
-        INS_LDA_ABY = 0xB9,
-        INS_LDA_IDX = 0xA1,
-        INS_LDA_IDY = 0xB1,
-        INS_LDX_IM = 0xA2,
-        INS_LDX_ZP = 0xA6,
-        INS_LDX_ZPY = 0xB6,
-        INS_LDX_AB = 0xAE,
-        INS_LDX_ABY = 0xBE,
-        INS_LDY_IM = 0xA0,
-        INS_LDY_ZP = 0xA4,
-        INS_LDY_ZPX = 0xB4,
-        INS_LDY_AB = 0xAC,
-        INS_LDY_ABX = 0xBC,
-        INS_STA_ZP = 0x85,
-        INS_STA_ZPX = 0x95,
-        INS_STA_AB = 0x8D,
-        INS_STA_ABX = 0x9D,
-        INS_STA_ABY = 0x99,
-        INS_STA_IDX = 0x81,
-        INS_STA_IDY = 0x91,
-        INS_STX_ZP = 0x86,
-        INS_STX_ZPY = 0x96,
-        INS_STX_AB = 0x8E,
-        INS_STY_ZP = 0x84,
-        INS_STY_ZPX = 0x94,
-        INS_STY_AB = 0x8C,
-        INS_TAX_I = 0xAA,
-        INS_TAY_I = 0xA8,
-        INS_TSX_I = 0xBA,
-        INS_TXA_I = 0x8A,
-        INS_TXS_I = 0x9A,
-        INS_TYA_I = 0x98,
-        INS_PHA_I = 0x48,
-        INS_PHP_I = 0x08,
+	static constexpr Byte
+		INS_LDA_IM = 0xA9,
+		INS_LDA_ZP = 0xA5,
+		INS_LDA_ZPX = 0xB5,
+		INS_LDA_AB = 0xAD,
+		INS_LDA_ABX = 0xBD,
+		INS_LDA_ABY = 0xB9,
+		INS_LDA_IDX = 0xA1,
+		INS_LDA_IDY = 0xB1,
+		INS_LDX_IM = 0xA2,
+		INS_LDX_ZP = 0xA6,
+		INS_LDX_ZPY = 0xB6,
+		INS_LDX_AB = 0xAE,
+		INS_LDX_ABY = 0xBE,
+		INS_LDY_IM = 0xA0,
+		INS_LDY_ZP = 0xA4,
+		INS_LDY_ZPX = 0xB4,
+		INS_LDY_AB = 0xAC,
+		INS_LDY_ABX = 0xBC,
+		INS_STA_ZP = 0x85,
+		INS_STA_ZPX = 0x95,
+		INS_STA_AB = 0x8D,
+		INS_STA_ABX = 0x9D,
+		INS_STA_ABY = 0x99,
+		INS_STA_IDX = 0x81,
+		INS_STA_IDY = 0x91,
+		INS_STX_ZP = 0x86,
+		INS_STX_ZPY = 0x96,
+		INS_STX_AB = 0x8E,
+		INS_STY_ZP = 0x84,
+		INS_STY_ZPX = 0x94,
+		INS_STY_AB = 0x8C,
+		INS_TAX_I = 0xAA,
+		INS_TAY_I = 0xA8,
+		INS_TSX_I = 0xBA,
+		INS_TXA_I = 0x8A,
+		INS_TXS_I = 0x9A,
+		INS_TYA_I = 0x98,
+		INS_PHA_I = 0x48,
+		INS_PHP_I = 0x08,
 		INS_PLA_I = 0x68,
 		INS_PLP_I = 0x28,
 		INS_NOP_I = 0xEA,
@@ -379,26 +379,26 @@ struct CPU {
 		INS_ROL_ABX = 0x3E;
 
 
-    void execute(uint32_t cycles, MEM& memory) {
-        while (cycles > 0) {
-            Byte ins = Fetch(cycles, memory);
+	void execute(uint32_t cycles, MEM& memory) {
+		while (cycles > 0) {
+			Byte ins = Fetch(cycles, memory);
 
-            switch (ins) {
-                case INS_LDA_IM: {
-                    A = IM(cycles, memory);
-                    setZN(A);
-                } break;
+			switch (ins) {
+				case INS_LDA_IM: {
+					A = IM(cycles, memory);
+					setZN(A);
+				} break;
 
-                case INS_LDA_ZP: {
-                    A = read(cycles, ZP(cycles, memory), memory);
-                    setZN(A);
-                } break;
+				case INS_LDA_ZP: {
+					A = read(cycles, ZP(cycles, memory), memory);
+					setZN(A);
+				} break;
 
-                case INS_LDA_ZPX: {
-                    A = read(cycles, ZPX(cycles, memory), memory);
-                    setZN(A);
-                } break;
-                case INS_LDA_AB: {
+				case INS_LDA_ZPX: {
+					A = read(cycles, ZPX(cycles, memory), memory);
+					setZN(A);
+				} break;
+				case INS_LDA_AB: {
 					A = read(cycles, AB(cycles, memory), memory);
 					setZN(A);
 				} break;
@@ -420,18 +420,18 @@ struct CPU {
 					setZN(A);
 				} break;
 				case INS_LDX_IM: {
-                    X = IM(cycles, memory);
-                    setZN(X);
+					X = IM(cycles, memory);
+					setZN(X);
 				} break;
 				case INS_LDX_ZP: {
-                    X = read(cycles, ZP(cycles, memory), memory);
-                    setZN(X);
+					X = read(cycles, ZP(cycles, memory), memory);
+					setZN(X);
 				} break;
 				case INS_LDX_ZPY: {
 					X = read(cycles, ZPY(cycles, memory), memory);
 					setZN(X);
-			    } break;
-			    case INS_LDX_AB: {
+				} break;
+				case INS_LDX_AB: {
 					X = read(cycles, AB(cycles, memory), memory);
 					setZN(X);
 				} break;
@@ -440,16 +440,16 @@ struct CPU {
 					setZN(X);
 				} break;
 				case INS_LDY_IM: {
-                    Y = IM(cycles, memory);
-                    setZN(Y);
+					Y = IM(cycles, memory);
+					setZN(Y);
 				} break;
 				case INS_LDY_ZP: {
 					Y = read(cycles, ZP(cycles, memory), memory);
 					setZN(Y);
 				} break;
 				case INS_LDY_ZPX: {
-                    Y = read(cycles, ZPX(cycles, memory), memory);
-                    setZN(Y);
+					Y = read(cycles, ZPX(cycles, memory), memory);
+					setZN(Y);
 				} break;
 				case INS_LDY_AB: {
 					Y = read(cycles, AB(cycles, memory), memory);
@@ -545,9 +545,9 @@ struct CPU {
 				case INS_PLP_I: {
 					Byte PLP = pullFromStack(cycles, SP, memory);
 
-    				std::bitset<8> bits(PLP);
-					
-					
+					std::bitset<8> bits(PLP);
+
+
 					C = bits[0];
 					Z = bits[1];
 					I = bits[2];
@@ -555,7 +555,7 @@ struct CPU {
 					V = bits[6];
 					N = bits[7];
 					cycles--;
-					
+
 
 				} break;
 				case INS_NOP_I: {
@@ -564,466 +564,470 @@ struct CPU {
 				} break;
 				case INS_AND_IM: {
 					Byte comp = IM(cycles, memory);
-					
+
 					A = comp & A;
-					
+
 					setZN(A);
 				} break;
 				case INS_AND_ZP: {
 					Byte comp = read(cycles, ZP(cycles, memory), memory);
 
-					
+
 					A = comp & A;
 
 					setZN(A);
 				} break;
 				case INS_AND_ZPX: {
 					Byte comp = read(cycles, ZPX(cycles, memory), memory);
-					
+
 					A = comp & A;
 
 					setZN(A);
-					
+
 				} break;
 				case INS_AND_AB: {
 					Byte comp = read(cycles, AB(cycles, memory), memory);
-					
+
 					A = comp & A;
-					
+
 					setZN(A);
 				} break;
 				case INS_AND_ABX: {
 					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
-					
+
 					A = comp & A;
-					
+
 					setZN(A);
 				} break;
 				case INS_AND_ABY: {
 					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
-					
+
 					A = comp & A;
-					
+
 					setZN(A);
 				} break;
 				case INS_AND_IDX: {
 					Byte comp = read(cycles, IDX(cycles, memory), memory);
-					
+
 					A = comp & A;
-					
+
 					setZN(A);
 				} break;
 				case INS_AND_IDY: {
 					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
-					
+
 					A = comp & A;
 
 					setZN(A);
 				} break;
 				case INS_ORA_IM: {
 					Byte comp = IM(cycles, memory);
-					
+
 					A = A | comp;
-					
+
 					setZN(A);
 				} break;
 				case INS_ORA_ZP: {
 					Byte comp = read(cycles, ZP(cycles, memory), memory);
-					
+
 					A = A | comp;
 
 					setZN(A);
 				} break;
 				case INS_ORA_ZPX: {
 					Byte comp = read(cycles, ZPX(cycles, memory), memory);
-					
+
 					A = A | comp;
 
 					setZN(A);
 				} break;
 				case INS_ORA_AB: {
 					Byte comp = read(cycles, AB(cycles, memory), memory);
-					
+
 					A = A | comp;
 
 					setZN(A);
 				} break;
 				case INS_ORA_ABX: {
 					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
-					
+
 					A = A | comp;
-					
+
 					setZN(A);
 				} break;
 				case INS_ORA_ABY: {
 					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
-					
+
 					A = A | comp;
-					
+
 					setZN(A);
 				} break;
 				case INS_ORA_IDX: {
 					Byte comp = read(cycles, IDX(cycles, memory), memory);
-					
+
 					A = A | comp;
-					
+
 					setZN(A);
 				} break;
 				case INS_ORA_IDY: {
 					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
-					
+
 					A = A | comp;
 
 					setZN(A);
 				} break;
 				case INS_EOR_IM: {
 					A = A ^ IM(cycles, memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_ZP: {
 					A = A ^ read(cycles, ZP(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_ZPX: {
 					A = A ^ read(cycles, ZPX(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_AB: {
 					A = A ^ read(cycles, AB(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_ABX: {
 					A = A ^ read(cycles, ABXcross(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_ABY: {
 					A = A ^ read(cycles, ABYcross(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_IDX: {
 					A = A ^ read(cycles, IDX(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_EOR_IDY: {
 					A = A ^ read(cycles, IDYcross(cycles, memory), memory);
-					
+
 					setZN(A);
 				} break;
 				case INS_BIT_ZP: {
 					Byte result = read(cycles, ZP(cycles, memory), memory);
-					
+
 					std::bitset<8> bits(result);
-					
+
 					N = bits[1];
 					V = bits[2];
 					Z = (result == 0);
 				} break;
 				case INS_BIT_AB: {
 					Byte result = read(cycles, AB(cycles, memory), memory);
-					
+
 					std::bitset<8> bits(result);
-					
+
 					N = bits[1];
 					V = bits[2];
 					Z = (result == 0);
 				} break;
-				case INS_JMP_AB: {	
-					
+				case INS_JMP_AB: {
+
 					Word set = AB(cycles, memory);
-					
-					
+
+
 					PC = set;
-					
-					
+
+
 				} break;
 				case INS_JMP_IND: {
-					
+
 					Byte low = Fetch(cycles, memory);
 					Byte high = Fetch(cycles, memory);
-					
+
 					Word add = (high << 8) | low;
-					
+
 					Byte PClow = read(cycles, add, memory);
-					
+
 					Byte PChigh;
-					
+
 					if ((add & 0xFF) == 0xFF) {
 						// Emulated bug, to fix: 0x0100 | add
 						PChigh = read(cycles, (add & 0xFF00), memory);
-					} else {
+					}
+					else {
 						PChigh = read(cycles, add + 1, memory);
 					}
-					
+
 					PC = (PChigh << 8) | PClow;
-					
+
 				} break;
 				case INS_ASL_A: {
 					std::bitset<8> bits(A);
-					
+
 					C = bits[7];
-					
+
 					A = A << 1;
-					
+
 					cycles--;
-					
+
 					std::bitset<8> resbits(A);
-					
+
 					N = resbits[7];
 					Z = (A == 0);
-					
+
 				} break;
 				case INS_ASL_ZP: {
-					
+
 					Byte address = ZP(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[7];
-					
+
 					Byte shift = temp << 1;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = resbits[7];
 					Z = (shift == 0);
-					
+
 					cycles--;
-					
-					
+
+
 				} break;
 				case INS_ASL_ZPX: {
-					
+
 					Byte address = ZPX(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[7];
-					
+
 					Byte shift = temp << 1;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = resbits[7];
 					Z = (shift == 0);
-					
+
 					cycles--;
 				} break;
 				case INS_ASL_AB: {
 					Word address = AB(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[7];
-					
+
 					Byte shift = temp << 1;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = resbits[7];
 					Z = (shift == 0);
-					
+
 					cycles--;
 				} break;
 				case INS_ASL_ABX: {
 					Word address = ABX(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[7];
-					
+
 					Byte shift = temp << 1;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = resbits[7];
 					Z = (shift == 0);
-					
+
 					cycles--;
 				} break;
 				case INS_LSR_A: {
 					std::bitset<8> bits(A);
-					
+
 					C = bits[0];
-					
+
 					A = A >> 1;
-					
+
 					cycles--;
-					
+
 					N = 0;
-					Z = (A == 0); 
+					Z = (A == 0);
 				} break;
 				case INS_LSR_ZP: {
-					
+
 					Word address = ZP(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[0];
-					
+
 					Byte shift = temp >> 1;
-					
+
 					cycles--;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = 0;
 					Z = (shift == 0);
-					
+
 					cycles--;
 				} break;
 				case INS_LSR_ZPX: {
 					Word address = ZPX(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[0];
-					
+
 					Byte shift = temp >> 1;
-					
+
 					cycles--;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = 0;
 					Z = (shift == 0);
-					
+
 					cycles--;
 				} break;
 				case INS_LSR_AB: {
 					Word address = AB(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[0];
-					
+
 					Byte shift = temp >> 1;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = 0;
 					Z = (shift == 0);
 				} break;
 				case INS_LSR_ABX: {
-					
+
 					Word address = ABX(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[0];
-					
+
 					Byte shift = temp >> 1;
-					
+
 					cycles--;
-					
+
 					write(cycles, address, shift, memory);
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					N = 0;
 					Z = (shift == 0);
-					
+
 					cycles--;
-					
+
 				} break;
 				case INS_ROL_A: {
 					std::bitset<8> bits(A);
-					
+
 					C = bits[7];
-					
+
 					A = A << 1;
-					
+
 					cycles--;
-					
+
 					std::bitset<8> resbits(A);
-					
+
 					resbits[0] = C;
-					
+
 					N = resbits[7];
 					Z = (A == 0);
-					
+
 				} break;
 				case INS_ROL_ZP: {
 					Word address = ZP(cycles, memory);
-					
+
 					Byte temp = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(temp);
-					
+
 					C = bits[7];
-					
-					
+
+
 					Byte shift = temp << 1;
-					
+
 					cycles--;
-					
+
 					std::bitset<8> resbits(shift);
-					
+
 					resbits[0] = C;
-					
-					for (int i = 8; i > 0; i++) {
+
+					for (int i = 8; i > 0; i--) {
 						std::cout << resbits[i];
 					}
 					write(cycles, address, shift, memory);
 					Z = (shift == 0);
 					N = resbits[7];
 				} break;
-                default: {
-                    std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
-                    cycles = 0;
-                } break;
+				default: {
+					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
+					cycles = 0;
+				} break;
+
+			}
+		}	
 
 
-            }
-        }
-    }
+	}
 
 };
 
+// "Static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
+static MEM mem;
+CPU cpu;
+
 int main() {
 
-    MEM mem;
-    CPU cpu;
 
 
 
-    cpu.reset(mem);
+	cpu.reset(mem);
 
 	cpu.X = 0x01;
 
@@ -1033,10 +1037,10 @@ int main() {
 
 
 
-    cpu.execute(4, mem);
+	cpu.execute(4, mem);
 
-    std::cout << std::hex << static_cast<int>(cpu.A) << std::endl << static_cast<int>(cpu.X) << std::endl << static_cast<int>(cpu.PC) << std::endl << static_cast<int>(cpu.Z) << std::endl << static_cast<int>(cpu.N);
+	std::cout << std::hex << static_cast<int>(cpu.A) << std::endl << static_cast<int>(cpu.X) << std::endl << static_cast<int>(cpu.PC) << std::endl << static_cast<int>(cpu.Z) << std::endl << static_cast<int>(cpu.N);
 
 
-    return 0;
+	return 0;
 }
