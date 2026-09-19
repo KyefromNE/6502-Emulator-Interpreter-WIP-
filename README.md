@@ -21,31 +21,32 @@ TYA
 AND
 ORA
 EOR
-BIT
+
 PHA
 PLA
-PHP
 PLP
 TXS
 TSX
 NOP
-
+JMP
 
 # Unsure about completion
 
 
-JMP
 
 
-# Known to be not working (to be fixed)
+
+# To be fixed
 
 ASL
 LSR
-
+PHP
+BIT
+ROL
 
 # Not completed
 
-ROL
+
 ROR
 JSR
 RTS
