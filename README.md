@@ -21,7 +21,7 @@ TYA
 AND
 ORA
 EOR
-
+BIT
 PHA
 PLA
 PLP
@@ -29,7 +29,10 @@ TXS
 TSX
 NOP
 JMP
-
+ASL
+LSR
+PHP
+ROL
 # Unsure about completion
 
 
@@ -38,11 +41,7 @@ JMP
 
 # To be fixed
 
-ASL
-LSR
-PHP
-BIT
-ROL
+
 
 # Not completed
 
