@@ -2,7 +2,7 @@
 #include <iostream>
 #include <bitset>
 #include <iomanip>
-#include <string>
+#include <cstring>
 
 
 /* NOTE:
@@ -21,6 +21,8 @@
 	https://www.nesdev.org/wiki/
 
 	https://markjames.dev/blog/6502-jump-indirect-bug
+
+	https://6502.org/forum/viewtopic.php?t=1708
 */
 
 /* NOTE:
@@ -38,12 +40,11 @@ struct MEM {
 
 	void init() {
 
-		data[MAX_MEM - 1] = { 0 };
+		memset(data, 0, MAX_MEM);
 		data[0xFFFC] = 0x00;
 		data[0xFFFD] = 0x80;
 
 	}
-
 
 
 	Byte operator[](uint32_t address) const {
@@ -58,19 +59,24 @@ struct MEM {
 struct CPU {
 
 
+
 	// Program Counter
-	Word PC;
+	Word PC = 0;
 
 	// Stack Pointer
 	Byte SP = 0xFD;
 
 	// Registers
 
-	Byte A, X, Y = 0;
+	Byte A = 0;
+
+	Byte X = 0;
+
+	Byte Y = 0;
 
 
 	// Flags
-	Byte C : 1 = 0; // Carry Flag
+	Byte C : 1; // Carry Flag
 	Byte Z : 1; // Zero Flag
 	Byte I : 1; // Interrupt Disable
 	Byte D : 1; // Decimal Mode
@@ -79,42 +85,50 @@ struct CPU {
 
 
 
-	Byte status =
-		(N << 7) |
+	Byte getstatus() const {
+		return (N << 7) |
 		(V << 6) |
-		(1 << 5) |   // has no purpose
+		(1 << 5) |   // Always 1 regardless of other status flags
 		(1 << 4) |   // Invisible Break flag
 		(D << 3) |
 		(I << 2) |
 		(Z << 1) |
 		C;
+	}
+
+
 	void reset(MEM& memory) {
-		memory.init();
 		Byte l = memory[0xFFFC];
 		Byte h = memory[0xFFFD];
 		PC = l | (h << 8);
 		SP = 0xFD;
-		C = Z = I = D = V = N = 0;
+		C = Z = D = V = N = 0;
 		A = X = Y = 0;
+		I = 1;
 
 	}
+
+	void powerOn(MEM& memory) {
+		memory.init();
+		reset(memory);
+	}
+
 	Byte Fetch(uint32_t& cycles, MEM& memory) {
 		// PC is where the next instruction is stored
 		Byte Data = memory[PC];
 		// PC is incremented, allowing the next use of PC to be the next instruction
 		PC++;
-		//
 		cycles--;
 		return Data;
 	}
 
-	Byte read(uint32_t& cycles, uint32_t address, MEM& memory) {
+	static Byte read(uint32_t& cycles, uint32_t address, MEM& memory) {
 		Byte Data = memory[address];
 		cycles--;
 		return Data;
 	}
 
-	void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
+	static void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
 		memory[address] = toWrite;
 		cycles--;
 	}
@@ -272,7 +286,7 @@ struct CPU {
 		return add;
 	}
 
-	void pushToStack(uint32_t& cycles, Byte& SP, Byte whatToStack, MEM& memory) {
+	static void pushToStack(uint32_t& cycles, Byte& SP, Byte whatToStack, MEM& memory) {
 		//SP lives 0x0100-0x01FF, since SP is initialised as 0xFD, 0x100 + 0xFD ensures it's within range of where the stack lives
 		memory[0x0100 + SP] = whatToStack;
 		cycles--;
@@ -280,7 +294,7 @@ struct CPU {
 		cycles--;
 	}
 
-	Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
+	static Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
 		SP++;
 		cycles--;
 		Byte op = memory[0x0100 + SP];
@@ -535,7 +549,7 @@ struct CPU {
 					pushToStack(cycles, SP, A, memory);
 				} break;
 				case INS_PHP_I: {
-					pushToStack(cycles, SP, status, memory);
+					pushToStack(cycles, SP, getstatus(), memory);
 				} break;
 				case INS_PLA_I: {
 					A = pullFromStack(cycles, SP, memory);
@@ -721,18 +735,18 @@ struct CPU {
 
 					std::bitset<8> bits(result);
 
-					N = bits[1];
-					V = bits[2];
-					Z = (result == 0);
+					N = bits[7];
+					V = bits[6];
+					Z = ((A & result) == 0);
 				} break;
 				case INS_BIT_AB: {
 					Byte result = read(cycles, AB(cycles, memory), memory);
 
 					std::bitset<8> bits(result);
 
-					N = bits[1];
-					V = bits[2];
-					Z = (result == 0);
+					N = bits[7];
+					V = bits[6];
+					Z = ((A & result) == 0);
 				} break;
 				case INS_JMP_AB: {
 
@@ -755,7 +769,6 @@ struct CPU {
 					Byte PChigh;
 
 					if ((add & 0xFF) == 0xFF) {
-						// Emulated bug, to fix: 0x0100 | add
 						PChigh = read(cycles, (add & 0xFF00), memory);
 					}
 					else {
@@ -845,6 +858,7 @@ struct CPU {
 					cycles--;
 				} break;
 				case INS_ASL_ABX: {
+
 					Word address = ABX(cycles, memory);
 
 					Byte temp = read(cycles, address, memory);
@@ -852,8 +866,11 @@ struct CPU {
 					std::bitset<8> bits(temp);
 
 					C = bits[7];
-
+					cycles--;
+					
 					Byte shift = temp << 1;
+
+					cycles--;
 
 					write(cycles, address, shift, memory);
 
@@ -861,8 +878,6 @@ struct CPU {
 
 					N = resbits[7];
 					Z = (shift == 0);
-
-					cycles--;
 				} break;
 				case INS_LSR_A: {
 					std::bitset<8> bits(A);
@@ -892,12 +907,8 @@ struct CPU {
 
 					write(cycles, address, shift, memory);
 
-					std::bitset<8> resbits(shift);
-
 					N = 0;
 					Z = (shift == 0);
-
-					cycles--;
 				} break;
 				case INS_LSR_ZPX: {
 					Word address = ZPX(cycles, memory);
@@ -914,12 +925,8 @@ struct CPU {
 
 					write(cycles, address, shift, memory);
 
-					std::bitset<8> resbits(shift);
-
 					N = 0;
 					Z = (shift == 0);
-
-					cycles--;
 				} break;
 				case INS_LSR_AB: {
 					Word address = AB(cycles, memory);
@@ -932,9 +939,10 @@ struct CPU {
 
 					Byte shift = temp >> 1;
 
+					cycles--;
+
 					write(cycles, address, shift, memory);
 
-					std::bitset<8> resbits(shift);
 
 					N = 0;
 					Z = (shift == 0);
@@ -955,7 +963,6 @@ struct CPU {
 
 					write(cycles, address, shift, memory);
 
-					std::bitset<8> resbits(shift);
 
 					N = 0;
 					Z = (shift == 0);
@@ -966,44 +973,46 @@ struct CPU {
 				case INS_ROL_A: {
 					std::bitset<8> bits(A);
 
+					Byte temp = C;
+
 					C = bits[7];
 
 					A = A << 1;
 
 					cycles--;
 
-					std::bitset<8> resbits(A);
+					A = A | temp;
 
-					resbits[0] = C;
+					std::bitset<8> resbits(A);
 
 					N = resbits[7];
 					Z = (A == 0);
 
 				} break;
 				case INS_ROL_ZP: {
-					Word address = ZP(cycles, memory);
+					// 1
+					Byte address = ZP(cycles, memory);
 
-					Byte temp = read(cycles, address, memory);
+					Byte temp = C;
 
-					std::bitset<8> bits(temp);
+					Byte operand = read(cycles, address, memory);
+
+					std::bitset<8> bits(operand);
 
 					C = bits[7];
 
-
-					Byte shift = temp << 1;
+					operand = operand << 1;
 
 					cycles--;
 
-					std::bitset<8> resbits(shift);
+					operand = operand | temp;
 
-					resbits[0] = C;
+					write(cycles, address, operand, memory);
 
-					for (int i = 8; i > 0; i--) {
-						std::cout << resbits[i];
-					}
-					write(cycles, address, shift, memory);
-					Z = (shift == 0);
+					std::bitset<8> resbits(operand);
+
 					N = resbits[7];
+					Z = (operand == 0);
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
@@ -1011,35 +1020,38 @@ struct CPU {
 				} break;
 
 			}
-		}	
+		}
 
 
 	}
 
 };
 
-// "Static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
+// "static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
 static MEM mem;
 CPU cpu;
 
 int main() {
 
-
-
-
-	cpu.reset(mem);
+	cpu.powerOn(mem);
 
 	cpu.X = 0x01;
 
-	mem[0x8000] = 0xBC;
+	mem[0x8000] = CPU::INS_LDY_ABX;
 	mem[0x8001] = 0xAB;
+	mem[0x8002] = 0xCD;
 
-
-
+	mem[0xCDAC] = 0x84;
 
 	cpu.execute(4, mem);
 
-	std::cout << std::hex << static_cast<int>(cpu.A) << std::endl << static_cast<int>(cpu.X) << std::endl << static_cast<int>(cpu.PC) << std::endl << static_cast<int>(cpu.Z) << std::endl << static_cast<int>(cpu.N);
+	std::cout
+		<< std::hex
+		<< "Y:  " << static_cast<int>(cpu.Y) << '\n'
+		<< "X:  " << static_cast<int>(cpu.X) << '\n'
+		<< "PC: " << static_cast<int>(cpu.PC) << '\n'
+		<< "Z:  " << static_cast<int>(cpu.Z) << '\n'
+		<< "N:  " << static_cast<int>(cpu.N) << '\n';
 
 
 	return 0;
