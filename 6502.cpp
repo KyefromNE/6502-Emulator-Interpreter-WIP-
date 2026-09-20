@@ -990,8 +990,82 @@ struct CPU {
 
 				} break;
 				case INS_ROL_ZP: {
-					// 1
+
 					Byte address = ZP(cycles, memory);
+
+					Byte temp = C;
+
+					Byte operand = read(cycles, address, memory);
+
+					std::bitset<8> bits(operand);
+
+					C = bits[7];
+
+					operand = operand << 1;
+
+					cycles--;
+
+					operand = operand | temp;
+
+					write(cycles, address, operand, memory);
+
+					std::bitset<8> resbits(operand);
+
+					N = resbits[7];
+					Z = (operand == 0);
+				} break;
+				case INS_ROL_ZPX: {
+
+					Byte address = ZPX(cycles, memory);
+
+					Byte temp = C;
+
+					Byte operand = read(cycles, address, memory);
+
+					std::bitset<8> bits(operand);
+
+					C = bits[7];
+
+					operand = operand << 1;
+
+					cycles--;
+
+					operand = operand | temp;
+
+					write(cycles, address, operand, memory);
+
+					std::bitset<8> resbits(operand);
+
+					N = resbits[7];
+					Z = (operand == 0);
+				} break;
+				case INS_ROL_AB: {
+					Word address = AB(cycles, memory);
+
+					Byte temp = C;
+
+					Byte operand = read(cycles, address, memory);
+
+					std::bitset<8> bits(operand);
+
+					C = bits[7];
+
+					operand = operand << 1;
+
+					cycles--;
+
+					operand = operand | temp;
+
+					write(cycles, address, operand, memory);
+
+					std::bitset<8> resbits(operand);
+
+					N = resbits[7];
+					Z = (operand == 0);
+				} break;
+				case INS_ROL_ABX: {
+
+					Byte address = ABX(cycles, memory);
 
 					Byte temp = C;
 
@@ -1027,7 +1101,7 @@ struct CPU {
 
 };
 
-// "static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
+// "Static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
 static MEM mem;
 CPU cpu;
 
