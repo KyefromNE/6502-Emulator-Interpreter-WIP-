@@ -390,7 +390,12 @@ struct CPU {
 		INS_ROL_ZP = 0x26,
 		INS_ROL_ZPX = 0x36,
 		INS_ROL_AB = 0x2E,
-		INS_ROL_ABX = 0x3E;
+		INS_ROL_ABX = 0x3E,
+		INS_ROR_A = 0x2A,
+		INS_ROR_ZP = 0x26,
+		INS_ROR_ZPX = 0x36,
+		INS_ROR_AB = 0x2E,
+		INS_ROR_ABX = 0x3E;
 
 
 	void execute(uint32_t cycles, MEM& memory) {
@@ -1087,6 +1092,123 @@ struct CPU {
 
 					N = resbits[7];
 					Z = (operand == 0);
+				} break;
+				case INS_ROR_A: {
+					Byte temp = C;
+					
+					std::bitset<8> bits(A);
+					
+					C = bits[0];
+					
+					A = A >> 1;
+					
+					A = A | temp;
+					
+					std::bitset<8> resbits(A);
+					
+					N = resbits[7];
+					Z = (A == 0)
+					
+				} break;
+				case INS_ROR_ZP: {
+
+					Byte temp = C;
+					
+					Byte address = ZP(cycles, memory);
+					
+					Byte operand = read(cycles, address, memory);
+					
+					std::bitset<8> bits(operand);
+					
+					C = bits[0];
+					
+					operand = operand >> 1;
+					
+					cycles--;
+					 
+					operand = operand | temp;
+					
+					write(cycles, address, operand, memory);
+					
+					std::bitset<8> resbits(operand);
+					
+					Z = (operand == 0);
+					N = resbits[7];
+				} break;
+				case INS_ROR_ZPX: {
+					
+					Byte temp = C;
+					
+					Byte address = ZPX(cycles, memory);
+					
+					Byte operand = read(cycles, address, memory);
+					
+					std::bitset<8> bits(operand);
+					
+					C = bits[0];
+					
+					operand = operand >> 1;
+					
+					cycles--;
+					 
+					operand = operand | temp;
+					
+					write(cycles, address, operand, memory);
+					
+					std::bitset<8> resbits(operand);
+					
+					Z = (operand == 0);
+					N = resbits[7];
+
+				} break;
+				case INS_ROR_AB: {
+					Byte temp = C;
+					
+					Word address = AB(cycles, memory);
+					
+					Byte operand = read(cycles, address, memory);
+					
+					std::bitset<8> bits(operand);
+					
+					C = bits[0];
+					
+					operand = operand >> 1;
+					
+					cycles--;
+					 
+					operand = operand | temp;
+					
+					write(cycles, address, operand, memory);
+					
+					std::bitset<8> resbits(operand);
+					
+					Z = (operand == 0);
+					N = resbits[7];
+				} break;
+				case INS_ROR_ABX: {
+					
+					Byte temp = C;
+					
+					Word address = ABX(cycles, memory);
+					
+					Byte operand = read(cycles, address, memory);
+					
+					std::bitset<8> bits(operand);
+					
+					C = bits[0];
+					
+					operand = operand >> 1;
+					
+					cycles--;
+					 
+					operand = operand | temp;
+					
+					write(cycles, address, operand, memory);
+					
+					std::bitset<8> resbits(operand);
+					
+					Z = (operand == 0);
+					N = resbits[7];
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
