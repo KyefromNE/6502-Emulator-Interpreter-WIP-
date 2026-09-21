@@ -33,8 +33,9 @@ ASL
 LSR
 PHP
 ROL
-# Unsure about completion
+# Untested
 
+ROR
 
 
 
@@ -46,7 +47,6 @@ ROL
 # Not completed
 
 
-ROR
 JSR
 RTS
 BRK
