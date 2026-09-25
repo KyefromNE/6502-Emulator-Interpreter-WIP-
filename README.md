@@ -36,7 +36,10 @@ ROL
 # Untested
 
 ROR
-
+JSR
+RTS
+BRK
+RTI
 
 
 
@@ -47,10 +50,7 @@ ROR
 # Not completed
 
 
-JSR
-RTS
-BRK
-RTI
+
 ADC
 SBC
 CMP
