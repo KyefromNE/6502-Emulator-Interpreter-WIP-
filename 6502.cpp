@@ -85,11 +85,11 @@ struct CPU {
 
 
 
-	Byte getstatus() const {
+	Byte getstatus(Byte B) {
 		return (N << 7) |
 		(V << 6) |
 		(1 << 5) |   // Always 1 regardless of other status flags
-		(1 << 4) |   // Invisible Break flag
+		(B << 4) |   // Invisible Break flag
 		(D << 3) |
 		(I << 2) |
 		(Z << 1) |
@@ -171,7 +171,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 		return combined;
 	}
@@ -180,7 +180,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 
 		Word add = combined + X;
@@ -196,7 +196,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 
 		Word add = combined + X;
@@ -210,7 +210,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 
 		Word add = combined + Y;
@@ -226,7 +226,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 
 		Word add = combined + Y;
@@ -245,7 +245,7 @@ struct CPU {
 		Byte low = read(cycles, add, memory);
 		Byte high = read(cycles, highadd, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 
 		return combined;
@@ -259,7 +259,7 @@ struct CPU {
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 		Word add = combined + Y;
 
@@ -278,7 +278,7 @@ struct CPU {
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
 
-		Word combined = low | (high << 8);
+		Word combined = low | ((Word)high << 8);
 
 		Word add = combined + Y;
 
@@ -298,7 +298,6 @@ struct CPU {
 		SP++;
 		cycles--;
 		Byte op = memory[0x0100 + SP];
-		cycles--;
 		return op;
 
 	}
@@ -395,8 +394,11 @@ struct CPU {
 		INS_ROR_ZP = 0x26,
 		INS_ROR_ZPX = 0x36,
 		INS_ROR_AB = 0x2E,
-		INS_ROR_ABX = 0x3E;
-
+		INS_ROR_ABX = 0x3E,
+		INS_JSR_AB = 0x20,
+		INS_RTS_I = 0x60,
+		INS_BRK_I = 0x00,
+		INS_RTI_I = 0x40;
 
 	void execute(uint32_t cycles, MEM& memory) {
 		while (cycles > 0) {
@@ -552,18 +554,21 @@ struct CPU {
 				} break;
 				case INS_PHA_I: {
 					pushToStack(cycles, SP, A, memory);
+					cycles--;
 				} break;
 				case INS_PHP_I: {
-					pushToStack(cycles, SP, getstatus(), memory);
+					pushToStack(cycles, SP, getstatus(0), memory);
+					cycles--;
 				} break;
 				case INS_PLA_I: {
 					A = pullFromStack(cycles, SP, memory);
 					cycles--;
 					setZN(A);
+					cycles--;
 				} break;
 				case INS_PLP_I: {
 					Byte PLP = pullFromStack(cycles, SP, memory);
-
+					cycles--;
 					std::bitset<8> bits(PLP);
 
 
@@ -767,7 +772,7 @@ struct CPU {
 					Byte low = Fetch(cycles, memory);
 					Byte high = Fetch(cycles, memory);
 
-					Word add = (high << 8) | low;
+					Word add = ((Word)high << 8) | low;
 
 					Byte PClow = read(cycles, add, memory);
 
@@ -780,7 +785,7 @@ struct CPU {
 						PChigh = read(cycles, add + 1, memory);
 					}
 
-					PC = (PChigh << 8) | PClow;
+					PC = ((Word)PChigh << 8) | PClow;
 
 				} break;
 				case INS_ASL_A: {
@@ -1209,6 +1214,57 @@ struct CPU {
 					
 					Z = (operand == 0);
 					N = resbits[7];
+				} break;
+				case INS_JSR_AB: {
+					Byte low = Fetch(cycles, memory);
+					
+					Byte high = Fetch(cycles, memory);
+					
+					// Address to return to
+					Word address = PC - 1;
+					
+					pushToStack(cycles, SP, (address >> 8) & 0xFF, memory);
+					pushToStack(cycles, SP, (address & 0xFF), memory);
+					
+					PC = low | ((Word)high << 8);
+				
+				} break;
+				case INS_RTS_I: {
+					Byte low = pullFromStack(cycles, SP, memory);
+					cycles--;
+					Byte high = pullFromStack(cycles, SP, memory);
+					cycles--;
+					PC = low | ((Word)high << 8);
+					cycles--;
+					PC++;
+					cycles--;
+				} break;
+				case INS_BRK_I: {
+					pushToStack(cycles, SP, (PC >> 8) & 0xFF, memory);
+					pushToStack(cycles, SP, PC & 0xFF, memory);
+					pushToStack(cycles, SP, getstatus(1), memory);
+					
+					
+					I = 1;
+					cycles--;
+				} break;
+				case INS_RTI_I: {
+					Byte status = pullFromStack(cycles, SP, memory);
+					
+					Byte low = pullFromStack(cycles, SP, memory);
+					
+					Byte high = pullFromStack(cycles, SP, memory);
+					
+					std::bitset<8> bits(status);
+					
+					C = bits[0];
+					Z = bits[1];
+					I = bits[2];
+					D = bits[3];
+					V = bits[6];
+					N = bits[7];
+					
+					PC = low | ((Word)high << 8);
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
