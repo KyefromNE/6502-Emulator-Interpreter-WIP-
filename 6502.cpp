@@ -398,7 +398,15 @@ struct CPU {
 		INS_JSR_AB = 0x20,
 		INS_RTS_I = 0x60,
 		INS_BRK_I = 0x00,
-		INS_RTI_I = 0x40;
+		INS_RTI_I = 0x40,
+		INS_ADC_IM = 0x69,
+		INS_ADC_ZP = 0x65,
+		INS_ADC_ZPX = 0x75,
+		INS_ADC_AB = 0x6D,
+		INS_ADC_ABX = 0x7D,
+		INS_ADC_ABY = 0x79,
+		INS_ADC_IDX = 0x61,
+		INS_ADC_IDY = 0x71;
 
 	void execute(uint32_t cycles, MEM& memory) {
 		while (cycles > 0) {
@@ -1265,6 +1273,149 @@ struct CPU {
 					N = bits[7];
 					
 					PC = low | ((Word)high << 8);
+				} break;
+				case INS_ADC_IM: {
+					Byte operand = IM(cycles, memory);
+
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+					
+					A = byteResult;
+				} break;
+				case INS_ADC_ZP: {
+
+					Byte operand = read(cycles, ZP(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+					
+					A = byteResult;
+					
+				} break;
+				case INS_ADC_ZPX: {
+					Byte operand = read(cycles, ZPX(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+					
+					A = byteResult;
+					
+				} break;
+				case INS_ADC_AB: {
+					Byte operand = read(cycles, AB(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+
+					A = byteResult;
+				} break;
+				case INS_ADC_ABX: {
+					Byte operand = read(cycles, ABXcross(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+
+					A = byteResult;
+				} break;
+				case INS_ADC_ABY: {
+					Byte operand = read(cycles, ABYcross(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+
+					A = byteResult;
+				} break;
+				case INS_ADC_IDX: {
+					Byte operand = read(cycles, IDX(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+
+					cycles--;
+					
+					A = byteResult;
+				} break;
+				case INS_ADC_IDY: {
+					Byte operand = read(cycles, IDYcross(cycles, memory), memory);
+					
+					Word res = A + operand + C;
+					
+					Byte byteResult = res & 0xFF;
+
+					C = (res > 0xFF);
+
+					Z = (byteResult == 0);
+
+					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
+
+					N = (byteResult >> 7);
+
+					cycles--;
+					
+					A = byteResult;
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
