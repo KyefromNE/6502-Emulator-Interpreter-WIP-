@@ -40,7 +40,7 @@ JSR
 RTS
 BRK
 RTI
-
+ADC
 
 
 # To be fixed
@@ -51,7 +51,7 @@ RTI
 
 
 
-ADC
+
 SBC
 CMP
 CPX
