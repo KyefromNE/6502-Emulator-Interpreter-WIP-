@@ -390,11 +390,11 @@ struct CPU {
 		INS_ROL_ZPX = 0x36,
 		INS_ROL_AB = 0x2E,
 		INS_ROL_ABX = 0x3E,
-		INS_ROR_A = 0x2A,
-		INS_ROR_ZP = 0x26,
-		INS_ROR_ZPX = 0x36,
-		INS_ROR_AB = 0x2E,
-		INS_ROR_ABX = 0x3E,
+		INS_ROR_A = 0x6A,
+		INS_ROR_ZP = 0x66,
+		INS_ROR_ZPX = 0x76,
+		INS_ROR_AB = 0x6E,
+		INS_ROR_ABX = 0x7E,
 		INS_JSR_AB = 0x20,
 		INS_RTS_I = 0x60,
 		INS_BRK_I = 0x00,
@@ -1120,7 +1120,7 @@ struct CPU {
 					std::bitset<8> resbits(A);
 					
 					N = resbits[7];
-					Z = (A == 0)
+					Z = (A == 0);
 					
 				} break;
 				case INS_ROR_ZP: {
