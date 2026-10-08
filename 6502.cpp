@@ -1408,7 +1408,22 @@ struct CPU {
 					C = (res > 0xFF);
 
 					Z = (byteResult == 0);
+					/* This works because:
+					V flag is only set when A and the operand have the same sign (bit 7), but
+					the result has a different sign (+ to - or - to +), and has therefore overflowed.
 
+					assume A ^ operand = 0111 1110 
+					assume A ^ byteResult = 1111 1111
+
+					flipping the bits of A ^ operand via the NOT (~) operator allows us to use a
+					bitwise AND (&) to determine if V should be set.
+
+					This is because if the A ^ operand is flipped and the 7th bit is the same as
+					the byteResult, then the unflipped A ^ operand 's 7th bit is different.
+
+					Using this definition, if the 7th bit of the result ends up different than the
+					operand's 7th bit, we can confirm that overflow has occurred.
+					*/
 					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
 
 					N = (byteResult >> 7);
