@@ -406,7 +406,15 @@ struct CPU {
 		INS_ADC_ABX = 0x7D,
 		INS_ADC_ABY = 0x79,
 		INS_ADC_IDX = 0x61,
-		INS_ADC_IDY = 0x71;
+		INS_ADC_IDY = 0x71,
+		INS_SBC_IM = 0xE9,
+		INS_SBC_ZP = 0xE5,
+		INS_SBC_ZPX = 0xF5,
+		INS_SBC_AB = 0xED,
+		INS_SBC_ABX = 0xFD,
+		INS_SBC_ABY = 0xF9,
+		INS_SBC_IDX = 0xE1,
+		INS_SBC_IDY = 0xF1;
 
 	void execute(uint32_t cycles, MEM& memory) {
 		while (cycles > 0) {
@@ -1422,7 +1430,7 @@ struct CPU {
 					the byteResult, then the unflipped A ^ operand 's 7th bit is different.
 
 					Using this definition, if the 7th bit of the result ends up different than the
-					operand's 7th bit, we can confirm that overflow has occurred.
+					operand's 7th bit (assuming the original had a 1 at bit 7), we can confirm that overflow has occurred.
 					*/
 					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
 
