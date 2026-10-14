@@ -1123,7 +1123,7 @@ struct CPU {
 					
 					A = A >> 1;
 					
-					A = A | temp;
+					A = A | (temp << 7);
 					
 					std::bitset<8> resbits(A);
 					
@@ -1147,7 +1147,7 @@ struct CPU {
 					
 					cycles--;
 					 
-					operand = operand | temp;
+					operand = operand | (temp << 7);
 					
 					write(cycles, address, operand, memory);
 					
@@ -1172,7 +1172,7 @@ struct CPU {
 					
 					cycles--;
 					 
-					operand = operand | temp;
+					operand = operand | (temp << 7);
 					
 					write(cycles, address, operand, memory);
 					
@@ -1197,7 +1197,7 @@ struct CPU {
 					
 					cycles--;
 					 
-					operand = operand | temp;
+					operand = operand | (temp << 7);
 					
 					write(cycles, address, operand, memory);
 					
@@ -1222,7 +1222,7 @@ struct CPU {
 					
 					cycles--;
 					 
-					operand = operand | temp;
+					operand = operand | (temp << 7);
 					
 					write(cycles, address, operand, memory);
 					
