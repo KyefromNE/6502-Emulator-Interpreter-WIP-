@@ -23,6 +23,8 @@
 	https://markjames.dev/blog/6502-jump-indirect-bug
 
 	https://6502.org/forum/viewtopic.php?t=1708
+
+	https://gmofishsauce.github.io/v6502demo/wiki/index.php-title-6502DecimalMode.html?utm_source=chatgpt.com#tests-for-adc
 */
 
 /* NOTE:
@@ -302,6 +304,75 @@ struct CPU {
 
 	}
 
+	void ADC(Byte operand) {
+		Byte oldA = A;
+		Byte carryIn = C;
+
+
+		Word binarySum = static_cast<Word>(oldA) + operand + carryIn;
+
+		Byte binaryResult = binarySum & 0xFF;
+
+			
+		Z = (binaryResult == 0);
+
+		if (D == 0) {
+
+
+			C = (binarySum > 0xFF);
+			
+
+			/* This works because:
+				V flag is only set when A and the operand have the same sign (bit 7), but
+				the result has a different sign (+ to - or - to +), and has therefore overflowed.
+
+				assume A ^ operand = 0111 1110 
+				assume A ^ binaryResult = 1111 1111
+
+				flipping the bits of A ^ operand via the NOT (~) operator allows us to use a
+				bitwise AND (&) to determine if V should be set.
+
+				This is because if the A ^ operand is flipped and the 7th bit is the same as
+				the binaryResult, then the unflipped A ^ operand 's 7th bit is different.
+
+				Using this definition, if the 7th bit of the result ends up different than the
+				operand's 7th bit (assuming the original had a 1 at bit 7), we can confirm that overflow has occurred.
+			*/
+			V = ((~(oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
+
+			N = (binaryResult >> 7);
+
+			A = binaryResult;
+		
+		} else {
+			unsigned low = (oldA & 0x0F) + (operand & 0x0F) + carryIn;
+
+			bool carryToHigh = (low > 9);
+
+			if (carryToHigh) {
+				low += 0x06;
+				low &= 0x0F; 
+			}
+
+			unsigned high = (oldA >> 4) + (operand >> 4) + carryToHigh;
+
+			N = (high >> 3);
+
+			V = ((~(oldA ^ operand) & (oldA ^ (high << 4)) & 0x80) >> 7);
+
+			bool carryOut = (high > 9);
+
+			if (carryOut) {
+				high += 0x06;
+				high &= 0x0F;
+			}
+
+			C = carryOut;
+
+			A = static_cast<Byte>((high << 4) | low);
+		}
+
+	}
 
 
 	static constexpr Byte
@@ -1283,162 +1354,31 @@ struct CPU {
 					PC = low | ((Word)high << 8);
 				} break;
 				case INS_ADC_IM: {
-					Byte operand = IM(cycles, memory);
-
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-					
-					A = byteResult;
+					ADC(IM(cycles, memory));
 				} break;
 				case INS_ADC_ZP: {
-
-					Byte operand = read(cycles, ZP(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-					
-					A = byteResult;
-					
+					ADC(read(cycles, ZP(cycles, memory), memory));
 				} break;
 				case INS_ADC_ZPX: {
-					Byte operand = read(cycles, ZPX(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-					
-					A = byteResult;
+					ADC(read(cycles, ZPX(cycles, memory), memory));
 					
 				} break;
 				case INS_ADC_AB: {
-					Byte operand = read(cycles, AB(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
+					ADC(read(cycles, AB(cycles, memory), memory));
 
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-
-					A = byteResult;
 				} break;
 				case INS_ADC_ABX: {
-					Byte operand = read(cycles, ABXcross(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
+					ADC(read(cycles, ABXcross(cycles, memory), memory));
 
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-
-					A = byteResult;
 				} break;
 				case INS_ADC_ABY: {
-					Byte operand = read(cycles, ABYcross(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-
-					A = byteResult;
+					ADC(read(cycles, ABYcross(cycles, memory), memory));
 				} break;
 				case INS_ADC_IDX: {
-					Byte operand = read(cycles, IDX(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-
-					cycles--;
-					
-					A = byteResult;
+					ADC(read(cycles, IDX(cycles, memory), memory));
 				} break;
 				case INS_ADC_IDY: {
-					Byte operand = read(cycles, IDYcross(cycles, memory), memory);
-					
-					Word res = A + operand + C;
-					
-					Byte byteResult = res & 0xFF;
-
-					C = (res > 0xFF);
-
-					Z = (byteResult == 0);
-					/* This works because:
-					V flag is only set when A and the operand have the same sign (bit 7), but
-					the result has a different sign (+ to - or - to +), and has therefore overflowed.
-
-					assume A ^ operand = 0111 1110 
-					assume A ^ byteResult = 1111 1111
-
-					flipping the bits of A ^ operand via the NOT (~) operator allows us to use a
-					bitwise AND (&) to determine if V should be set.
-
-					This is because if the A ^ operand is flipped and the 7th bit is the same as
-					the byteResult, then the unflipped A ^ operand 's 7th bit is different.
-
-					Using this definition, if the 7th bit of the result ends up different than the
-					operand's 7th bit (assuming the original had a 1 at bit 7), we can confirm that overflow has occurred.
-					*/
-					V = ((~(A ^ operand) & (A ^ byteResult) & 0x80));
-
-					N = (byteResult >> 7);
-
-					cycles--;
-					
-					A = byteResult;
+					ADC(read(cycles, IDYcross(cycles, memory), memory));
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
