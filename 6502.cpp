@@ -25,6 +25,8 @@
 	https://6502.org/forum/viewtopic.php?t=1708
 
 	https://gmofishsauce.github.io/v6502demo/wiki/index.php-title-6502DecimalMode.html?utm_source=chatgpt.com#tests-for-adc
+
+	https://www.youtube.com/watch?v=8XmxKPJDGU0&t=28s
 */
 
 /* NOTE:
@@ -293,7 +295,6 @@ struct CPU {
 		memory[0x0100 + SP] = whatToStack;
 		cycles--;
 		SP--;
-		cycles--;
 	}
 
 	static Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
@@ -313,20 +314,20 @@ struct CPU {
 
 		Byte binaryResult = binarySum & 0xFF;
 
-			
+
 		Z = (binaryResult == 0);
 
 		if (D == 0) {
 
 
 			C = (binarySum > 0xFF);
-			
+
 
 			/* This works because:
 				V flag is only set when A and the operand have the same sign (bit 7), but
 				the result has a different sign (+ to - or - to +), and has therefore overflowed.
 
-				assume A ^ operand = 0111 1110 
+				assume A ^ operand = 0111 1110
 				assume A ^ binaryResult = 1111 1111
 
 				flipping the bits of A ^ operand via the NOT (~) operator allows us to use a
@@ -343,7 +344,7 @@ struct CPU {
 			N = (binaryResult >> 7);
 
 			A = binaryResult;
-		
+
 		} else {
 			unsigned low = (oldA & 0x0F) + (operand & 0x0F) + carryIn;
 
@@ -351,7 +352,7 @@ struct CPU {
 
 			if (carryToHigh) {
 				low += 0x06;
-				low &= 0x0F; 
+				low &= 0x0F;
 			}
 
 			unsigned high = (oldA >> 4) + (operand >> 4) + carryToHigh;
@@ -372,6 +373,56 @@ struct CPU {
 			A = static_cast<Byte>((high << 4) | low);
 		}
 
+	}
+
+	void SBC(Byte operand) {
+		Byte oldA = A;
+		Byte carryIn = C;
+
+		Byte invertedOperand = ~operand;
+		Word binarySum = static_cast<Word>(oldA) + invertedOperand + carryIn;
+
+
+		Byte binaryResult = binarySum & 0xFF;
+
+
+		Z = (binaryResult == 0);
+
+		if (D == 0) {
+
+
+			C = (binarySum > 0xFF);
+
+			V = (((oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
+
+
+
+
+			N = (binaryResult >> 7);
+
+			A = binaryResult;
+
+		} else {
+			int low = (oldA & 0x0F) - (operand & 0x0F) - (carryIn ? 0 : 1);
+
+			bool borrowToHigh = (low < 0);
+
+			if (borrowToHigh) {
+				low -= 6;
+			}
+
+			int high = (oldA >> 4) - (operand >> 4) - (borrowToHigh ? 1 : 0);
+
+			bool borrowOut = (high < 0);
+
+			if (borrowOut) {
+				high -= 6;
+			}
+
+			C = !borrowOut;
+
+			A = static_cast<Byte>(((high & 0x0F) << 4) | (low & 0x0F));
+		}
 	}
 
 
@@ -964,7 +1015,7 @@ struct CPU {
 
 					C = bits[7];
 					cycles--;
-					
+
 					Byte shift = temp << 1;
 
 					cycles--;
@@ -1162,7 +1213,7 @@ struct CPU {
 				} break;
 				case INS_ROL_ABX: {
 
-					Byte address = ABX(cycles, memory);
+					Word address = ABX(cycles, memory);
 
 					Byte temp = C;
 
@@ -1178,6 +1229,8 @@ struct CPU {
 
 					operand = operand | temp;
 
+					cycles--;
+
 					write(cycles, address, operand, memory);
 
 					std::bitset<8> resbits(operand);
@@ -1187,134 +1240,140 @@ struct CPU {
 				} break;
 				case INS_ROR_A: {
 					Byte temp = C;
-					
+
 					std::bitset<8> bits(A);
-					
+
 					C = bits[0];
-					
+
 					A = A >> 1;
-					
+
 					A = A | (temp << 7);
-					
+
+					cycles--;
+
 					std::bitset<8> resbits(A);
-					
+
 					N = resbits[7];
 					Z = (A == 0);
-					
+
 				} break;
 				case INS_ROR_ZP: {
 
 					Byte temp = C;
-					
+
 					Byte address = ZP(cycles, memory);
-					
+
 					Byte operand = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(operand);
-					
+
 					C = bits[0];
-					
+
 					operand = operand >> 1;
-					
+
 					cycles--;
-					 
+
 					operand = operand | (temp << 7);
-					
+
 					write(cycles, address, operand, memory);
-					
+
 					std::bitset<8> resbits(operand);
-					
+
 					Z = (operand == 0);
 					N = resbits[7];
 				} break;
 				case INS_ROR_ZPX: {
-					
+
 					Byte temp = C;
-					
+
 					Byte address = ZPX(cycles, memory);
-					
+
 					Byte operand = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(operand);
-					
+
 					C = bits[0];
-					
+
 					operand = operand >> 1;
-					
+
 					cycles--;
-					 
+
 					operand = operand | (temp << 7);
-					
+
 					write(cycles, address, operand, memory);
-					
+
 					std::bitset<8> resbits(operand);
-					
+
 					Z = (operand == 0);
 					N = resbits[7];
 
 				} break;
 				case INS_ROR_AB: {
 					Byte temp = C;
-					
+
 					Word address = AB(cycles, memory);
-					
+
 					Byte operand = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(operand);
-					
+
 					C = bits[0];
-					
+
 					operand = operand >> 1;
-					
+
 					cycles--;
-					 
+
 					operand = operand | (temp << 7);
-					
+
 					write(cycles, address, operand, memory);
-					
+
 					std::bitset<8> resbits(operand);
-					
+
 					Z = (operand == 0);
 					N = resbits[7];
 				} break;
 				case INS_ROR_ABX: {
-					
+
 					Byte temp = C;
-					
+
 					Word address = ABX(cycles, memory);
-					
+
 					Byte operand = read(cycles, address, memory);
-					
+
 					std::bitset<8> bits(operand);
-					
+
 					C = bits[0];
-					
+
 					operand = operand >> 1;
-					
+
 					cycles--;
-					 
+
 					operand = operand | (temp << 7);
-					
+
 					write(cycles, address, operand, memory);
-					
+
 					std::bitset<8> resbits(operand);
+
+					cycles--;
 					
 					Z = (operand == 0);
 					N = resbits[7];
 				} break;
 				case INS_JSR_AB: {
 					Byte low = Fetch(cycles, memory);
-					
+
 					Byte high = Fetch(cycles, memory);
-					
+
 					// Address to return to
 					Word address = PC - 1;
-					
+
+					cycles--;
+
 					pushToStack(cycles, SP, (address >> 8) & 0xFF, memory);
 					pushToStack(cycles, SP, (address & 0xFF), memory);
-					
+
 					PC = low | ((Word)high << 8);
-				
+
 				} break;
 				case INS_RTS_I: {
 					Byte low = pullFromStack(cycles, SP, memory);
@@ -1324,34 +1383,43 @@ struct CPU {
 					PC = low | ((Word)high << 8);
 					cycles--;
 					PC++;
-					cycles--;
 				} break;
 				case INS_BRK_I: {
-					pushToStack(cycles, SP, (PC >> 8) & 0xFF, memory);
-					pushToStack(cycles, SP, PC & 0xFF, memory);
+					Fetch(cycles, memory);
+
+					Word returnAddress = PC;
+					pushToStack(cycles, SP, (returnAddress >> 8) & 0xFF, memory);
+					pushToStack(cycles, SP, returnAddress & 0xFF, memory);
 					pushToStack(cycles, SP, getstatus(1), memory);
-					
-					
+
+
 					I = 1;
-					cycles--;
+
+					Byte low = read(cycles, 0xFFFE, memory);
+					Byte high = read(cycles, 0xFFFF, memory);
+
+					PC = low | (high << 8);
 				} break;
 				case INS_RTI_I: {
 					Byte status = pullFromStack(cycles, SP, memory);
-					
+
 					Byte low = pullFromStack(cycles, SP, memory);
-					
+
 					Byte high = pullFromStack(cycles, SP, memory);
-					
+
 					std::bitset<8> bits(status);
-					
+
 					C = bits[0];
 					Z = bits[1];
 					I = bits[2];
 					D = bits[3];
 					V = bits[6];
 					N = bits[7];
-					
+					cycles--;
+
 					PC = low | ((Word)high << 8);
+
+					cycles--;
 				} break;
 				case INS_ADC_IM: {
 					ADC(IM(cycles, memory));
@@ -1361,7 +1429,7 @@ struct CPU {
 				} break;
 				case INS_ADC_ZPX: {
 					ADC(read(cycles, ZPX(cycles, memory), memory));
-					
+
 				} break;
 				case INS_ADC_AB: {
 					ADC(read(cycles, AB(cycles, memory), memory));
@@ -1379,6 +1447,9 @@ struct CPU {
 				} break;
 				case INS_ADC_IDY: {
 					ADC(read(cycles, IDYcross(cycles, memory), memory));
+				} break;
+				case INS_SBC_IM: {
+					SBC(IM(cycles, memory));
 				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
@@ -1401,23 +1472,13 @@ int main() {
 
 	cpu.powerOn(mem);
 
-	cpu.X = 0x01;
+	cpu.A = 0x32;
+	cpu.C = 0x01;
 
-	mem[0x8000] = CPU::INS_LDY_ABX;
-	mem[0x8001] = 0xAB;
-	mem[0x8002] = 0xCD;
+	mem[0x8000] = CPU::INS_SBC_IM;
+	mem[0x8001] = 0xA6;
 
-	mem[0xCDAC] = 0x84;
-
-	cpu.execute(4, mem);
-
-	std::cout
-		<< std::hex
-		<< "Y:  " << static_cast<int>(cpu.Y) << '\n'
-		<< "X:  " << static_cast<int>(cpu.X) << '\n'
-		<< "PC: " << static_cast<int>(cpu.PC) << '\n'
-		<< "Z:  " << static_cast<int>(cpu.Z) << '\n'
-		<< "N:  " << static_cast<int>(cpu.N) << '\n';
+	cpu.execute(2, mem);
 
 
 	return 0;
