@@ -41,6 +41,7 @@ RTS
 BRK
 RTI
 ADC
+SBC
 
 
 # To be fixed
@@ -48,11 +49,6 @@ ADC
 
 
 # Not completed
-
-
-
-
-SBC
 CMP
 CPX
 CPY
