@@ -26,7 +26,7 @@
 
 	https://gmofishsauce.github.io/v6502demo/wiki/index.php-title-6502DecimalMode.html?utm_source=chatgpt.com#tests-for-adc
 
-	https://www.youtube.com/watch?v=8XmxKPJDGU0&t=28s
+	https://www.youtube.com/watch?v=8XmxKPJDGU0&t=28s    massive help for ADC and SBC!!! Had to find D flag quirks elsewhere though :(
 */
 
 /* NOTE:
@@ -175,7 +175,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 		return combined;
 	}
@@ -184,7 +184,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 
 		Word add = combined + X;
@@ -200,7 +200,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 
 		Word add = combined + X;
@@ -214,7 +214,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 
 		Word add = combined + Y;
@@ -230,7 +230,7 @@ struct CPU {
 		Byte low = Fetch(cycles, memory);
 		Byte high = Fetch(cycles, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 
 		Word add = combined + Y;
@@ -249,7 +249,7 @@ struct CPU {
 		Byte low = read(cycles, add, memory);
 		Byte high = read(cycles, highadd, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 
 		return combined;
@@ -263,7 +263,7 @@ struct CPU {
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 		Word add = combined + Y;
 
@@ -282,7 +282,7 @@ struct CPU {
 		Byte low = read(cycles, operand, memory);
 		Byte high = read(cycles, highop, memory);
 
-		Word combined = low | ((Word)high << 8);
+		Word combined = low | (static_cast<Word>(high) << 8);
 
 		Word add = combined + Y;
 
@@ -378,8 +378,10 @@ struct CPU {
 	void SBC(Byte operand) {
 		Byte oldA = A;
 		Byte carryIn = C;
-
+		
+		// This would bug if not set as a variable and I have no clue why...
 		Byte invertedOperand = ~operand;
+		
 		Word binarySum = static_cast<Word>(oldA) + invertedOperand + carryIn;
 
 
@@ -389,22 +391,20 @@ struct CPU {
 		Z = (binaryResult == 0);
 
 		if (D == 0) {
-
-
+			
 			C = (binarySum > 0xFF);
 
 			V = (((oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
-
-
-
-
+			
 			N = (binaryResult >> 7);
 
 			A = binaryResult;
 
 		} else {
+			// signed int, A - M - (1 - C) used here instead of A + ~M + C 
 			int low = (oldA & 0x0F) - (operand & 0x0F) - (carryIn ? 0 : 1);
-
+			
+			// if it's negative, in binary it has to borrow from the high nibble
 			bool borrowToHigh = (low < 0);
 
 			if (borrowToHigh) {
@@ -424,6 +424,7 @@ struct CPU {
 			A = static_cast<Byte>(((high & 0x0F) << 4) | (low & 0x0F));
 		}
 	}
+
 
 
 	static constexpr Byte
@@ -536,7 +537,15 @@ struct CPU {
 		INS_SBC_ABX = 0xFD,
 		INS_SBC_ABY = 0xF9,
 		INS_SBC_IDX = 0xE1,
-		INS_SBC_IDY = 0xF1;
+		INS_SBC_IDY = 0xF1,
+		INS_CMP_IM = 0xC9,
+		INS_CMP_ZP = 0xC5,
+	    INS_CMP_ZPX = 0xD5,
+		INS_CMP_AB = 0xCD,
+		INS_CMP_ABX = 0xDD,
+		INS_CMP_ABY = 0xD9,
+		INS_CMP_IDX = 0xC1,
+		INS_CMP_IDY = 0xD1;
 
 	void execute(uint32_t cycles, MEM& memory) {
 		while (cycles > 0) {
@@ -910,7 +919,7 @@ struct CPU {
 					Byte low = Fetch(cycles, memory);
 					Byte high = Fetch(cycles, memory);
 
-					Word add = ((Word)high << 8) | low;
+					Word add = (static_cast<Word>(high) << 8) | low;
 
 					Byte PClow = read(cycles, add, memory);
 
@@ -923,7 +932,7 @@ struct CPU {
 						PChigh = read(cycles, add + 1, memory);
 					}
 
-					PC = ((Word)PChigh << 8) | PClow;
+					PC = (static_cast<Word>(PChigh) << 8) | PClow;
 
 				} break;
 				case INS_ASL_A: {
@@ -1372,7 +1381,7 @@ struct CPU {
 					pushToStack(cycles, SP, (address >> 8) & 0xFF, memory);
 					pushToStack(cycles, SP, (address & 0xFF), memory);
 
-					PC = low | ((Word)high << 8);
+					PC = low | (static_cast<Word>(high) << 8);
 
 				} break;
 				case INS_RTS_I: {
@@ -1380,7 +1389,7 @@ struct CPU {
 					cycles--;
 					Byte high = pullFromStack(cycles, SP, memory);
 					cycles--;
-					PC = low | ((Word)high << 8);
+					PC = low | (static_cast<Word>(high) << 8);
 					cycles--;
 					PC++;
 				} break;
@@ -1417,7 +1426,7 @@ struct CPU {
 					N = bits[7];
 					cycles--;
 
-					PC = low | ((Word)high << 8);
+					PC = low | (static_cast<Word>(high) << 8);
 
 					cycles--;
 				} break;
@@ -1451,6 +1460,27 @@ struct CPU {
 				case INS_SBC_IM: {
 					SBC(IM(cycles, memory));
 				} break;
+				case INS_SBC_ZP: {
+					SBC(read(cycles, ZP(cycles, memory), memory));
+				} break;
+				case INS_SBC_ZPX: {
+					SBC(read(cycles, ZPX(cycles, memory), memory));
+				} break;
+				case INS_SBC_AB: {
+					SBC(read(cycles, AB(cycles, memory), memory));
+				} break;
+				case INS_SBC_ABX: {
+					SBC(read(cycles, ABXcross(cycles, memory), memory));
+				} break;
+				case INS_SBC_ABY: {
+					SBC(read(cycles, ABYcross(cycles, memory), memory));
+				} break;
+				case INS_SBC_IDX: {
+					SBC(read(cycles, IDX(cycles, memory), memory));
+				} break;
+				case INS_SBC_IDY: {
+					SBC(read(cycles, IDYcross(cycles, memory), memory));
+				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
 					cycles = 0;
@@ -1475,7 +1505,7 @@ int main() {
 	cpu.A = 0x32;
 	cpu.C = 0x01;
 
-	mem[0x8000] = CPU::INS_SBC_IM;
+	mem[0x8000] = CPU::INS_SBC_ZP;
 	mem[0x8001] = 0xA6;
 
 	cpu.execute(2, mem);
