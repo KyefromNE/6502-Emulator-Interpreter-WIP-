@@ -8,6 +8,8 @@ If you have experience in emulation and spot a bug, please feel free to use the 
 
 # Instructions fully complete:
 
+
+# Untested
 LDA
 STA
 LDX
@@ -33,8 +35,6 @@ ASL
 LSR
 PHP
 ROL
-# Untested
-
 ROR
 JSR
 RTS
