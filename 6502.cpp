@@ -58,6 +58,8 @@ struct MEM {
 	Byte& operator[](uint32_t address) {
 		return data[address];
 	}
+	
+	
 };
 
 struct CPU {
@@ -435,6 +437,10 @@ struct CPU {
 	    
 	    N = (result & 0x80) != 0;
 	}
+	              
+	
+	
+	
 
 
 
@@ -556,7 +562,17 @@ struct CPU {
 		INS_CMP_ABX = 0xDD,
 		INS_CMP_ABY = 0xD9,
 		INS_CMP_IDX = 0xC1,
-		INS_CMP_IDY = 0xD1;
+		INS_CMP_IDY = 0xD1,
+		INS_CPX_IM = 0xE0,
+		INS_CPX_ZP = 0xE4,
+		INS_CPX_AB = 0xEC,
+		INS_CPY_IM = 0xC0,
+		INS_CPY_ZP = 0xC4,
+		INS_CPY_AB = 0xCC,
+		INS_INC_ZP = 0xE6,
+		INS_INC_ZPX = 0xF6,
+		INS_INC_AB = 0xEE,
+		INS_INC_ABX = 0xFE;
 
 	void execute(uint32_t cycles, MEM& memory) {
 		while (cycles > 0) {
@@ -1498,6 +1514,100 @@ struct CPU {
 				case INS_CMP_ZP: {
 				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
 				} break;
+				case INS_CMP_ZPX: {
+				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				} break;
+				case INS_CMP_AB: {
+				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				} break;
+				case INS_CMP_ABX: {
+				    compare(A, read(cycles, ABXcross(cycles, memory), memory), memory);
+				} break;
+				case INS_CMP_ABY: {
+				    compare(A, read(cycles, ABYcross(cycles, memory), memory), memory);
+				} break;
+				case INS_CMP_IDX: {
+				    compare(A, read(cycles, IDX(cycles, memory), memory), memory);
+				} break;
+				case INS_CMP_IDY: {
+				    compare(A, read(cycles, IDYcross(cycles, memory), memory), memory);
+				} break;
+				case INS_CPX_IM: {
+				    compare(A, IM(cycles, memory), memory);
+				} break;
+				case INS_CPX_ZP: {
+				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				} break;
+				case INS_CPX_AB: {
+				    compare(A, read(cycles, AB(cycles, memory), memory), memory);
+				} break;
+				case INS_CPY_IM: {
+				    compare(A, IM(cycles, memory), memory);
+				} break;
+				case INS_CPY_ZP: {
+				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				} break;
+				case INS_CPY_AB: {
+				    compare(A, read(cycles, AB(cycles, memory), memory), memory);
+				} break;
+				case INS_INC_ZP: {
+				    Word memoryLocation = static_cast<Word>(ZP(cycles, memory));
+				    
+				    Byte value = read(cycles, memoryLocation, memory);
+				    
+				    Byte result = value + 1;
+				    
+				    write(cycles, memoryLocation, result, memory);
+				    
+				    std::bitset<8> resbits(result);
+				    Z = (result == 0);
+				    N = resbits[7];
+				} break;
+				case INS_INC_ZPX: {
+				    Word memoryLocation = static_cast<Word>(ZPX(cycles, memory));
+				    
+				    Byte value = read(cycles, memoryLocation, memory);
+				    
+				    Byte result = value + 1;
+				    
+				    write(cycles, memoryLocation, result, memory);
+				    
+				    std::bitset<8> resbits(result);
+				    Z = (result == 0);
+				    N = resbits[7];
+				} break;
+				case INS_INC_AB: {
+				    Word memoryLocation = AB(cycles, memory);
+				    
+				    Byte value = read(cycles, memoryLocation, memory);
+				    
+				    Byte result = value + 1;
+				    
+				    cycles--;
+				    
+				    write(cycles, memoryLocation, result, memory);
+				    
+				    std::bitset<8> resbits(result);
+				    Z = (result == 0);
+				    N = resbits[7];
+				} break;
+				case INS_INC_ABX: {
+				    Word memoryLocation = ABX(cycles, memory);
+				    
+				    Byte value = read(cycles, memoryLocation, memory);
+				    
+				    Byte result = value + 1;
+				    
+				    cycles--;
+				    
+				    write(cycles, memoryLocation, result, memory);
+				    
+				    std::bitset<8> resbits(result);
+				    
+				    cycles--;
+				    Z = (result == 0);
+				    N = resbits[7];
+				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
 					cycles = 0;
@@ -1520,17 +1630,17 @@ int main() {
 	cpu.powerOn(mem);
     
     cpu.A = 0x80;
+    cpu.X = 0x00;
+    mem[0x1234] = 0x09;
     
-	mem[0x8000] = CPU::INS_CMP_ZP;
-	mem[0x8001] = 0x12;
+	mem[0x8000] = CPU::INS_INC_ABX;
+	mem[0x8001] = 0x34;
+	mem[0x8002] = 0x12;
 	
-	mem[0x12] = 0x80;
-    cpu.execute(3, mem);
-    // is A >= m
-    std::cout << static_cast<int>(cpu.C) << std::endl;
-    // Are they equal
+	
+    cpu.execute(7, mem);
+    std::cout << static_cast<int>(mem[0x1234]) << std::endl;
     std::cout << static_cast<int>(cpu.Z) << std::endl;
-    // is bit 7 active
     std::cout << static_cast<int>(cpu.N) << std::endl;
 	return 0;
 }
