@@ -42,7 +42,7 @@ BRK
 RTI
 ADC
 SBC
-
+INC
 
 # To be fixed
 
@@ -52,7 +52,6 @@ SBC
 CMP
 CPX
 CPY
-INC
 INX
 INY
 DEC
