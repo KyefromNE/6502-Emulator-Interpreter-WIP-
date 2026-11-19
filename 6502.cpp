@@ -424,6 +424,17 @@ struct CPU {
 			A = static_cast<Byte>(((high & 0x0F) << 4) | (low & 0x0F));
 		}
 	}
+	                 // A, X, Y        // Fetched value 
+	void compare(Byte whatToCompare, Byte againstWhat, MEM& memory) {
+	    
+	    Byte result = whatToCompare - againstWhat;
+	    
+	    C = whatToCompare >= againstWhat ? 1 : 0;
+	    
+	    Z = whatToCompare == againstWhat ? 1 : 0;
+	    
+	    N = (result & 0x80) != 0;
+	}
 
 
 
@@ -1481,6 +1492,12 @@ struct CPU {
 				case INS_SBC_IDY: {
 					SBC(read(cycles, IDYcross(cycles, memory), memory));
 				} break;
+				case INS_CMP_IM: {
+				    compare(A, IM(cycles, memory), memory);
+				} break;
+				case INS_CMP_ZP: {
+				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				} break;
 				default: {
 					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
 					cycles = 0;
@@ -1501,15 +1518,19 @@ CPU cpu;
 int main() {
 
 	cpu.powerOn(mem);
-
-	cpu.A = 0x32;
-	cpu.C = 0x01;
-
-	mem[0x8000] = CPU::INS_SBC_ZP;
-	mem[0x8001] = 0xA6;
-
-	cpu.execute(2, mem);
-
-
+    
+    cpu.A = 0x80;
+    
+	mem[0x8000] = CPU::INS_CMP_ZP;
+	mem[0x8001] = 0x12;
+	
+	mem[0x12] = 0x80;
+    cpu.execute(3, mem);
+    // is A >= m
+    std::cout << static_cast<int>(cpu.C) << std::endl;
+    // Are they equal
+    std::cout << static_cast<int>(cpu.Z) << std::endl;
+    // is bit 7 active
+    std::cout << static_cast<int>(cpu.N) << std::endl;
 	return 0;
 }
