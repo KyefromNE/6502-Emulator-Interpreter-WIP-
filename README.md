@@ -42,6 +42,9 @@ BRK
 RTI
 ADC
 SBC
+CMP
+CPX
+CPY
 INC
 
 # To be fixed
@@ -49,9 +52,7 @@ INC
 
 
 # Not completed
-CMP
-CPX
-CPY
+
 INX
 INY
 DEC
