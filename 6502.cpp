@@ -58,8 +58,8 @@ struct MEM {
 	Byte& operator[](uint32_t address) {
 		return data[address];
 	}
-	
-	
+
+
 };
 
 struct CPU {
@@ -91,7 +91,7 @@ struct CPU {
 
 
 
-	Byte getstatus(Byte B) {
+	Byte getstatus(const Byte B) const {
 		return (N << 7) |
 		(V << 6) |
 		(1 << 5) |   // Always 1 regardless of other status flags
@@ -380,10 +380,10 @@ struct CPU {
 	void SBC(Byte operand) {
 		Byte oldA = A;
 		Byte carryIn = C;
-		
+
 		// This would bug if not set as a variable and I have no clue why...
 		Byte invertedOperand = ~operand;
-		
+
 		Word binarySum = static_cast<Word>(oldA) + invertedOperand + carryIn;
 
 
@@ -393,19 +393,19 @@ struct CPU {
 		Z = (binaryResult == 0);
 
 		if (D == 0) {
-			
+
 			C = (binarySum > 0xFF);
 
 			V = (((oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
-			
+
 			N = (binaryResult >> 7);
 
 			A = binaryResult;
 
 		} else {
-			// signed int, A - M - (1 - C) used here instead of A + ~M + C 
+			// signed int, A - M - (1 - C) used here instead of A + ~M + C
 			int low = (oldA & 0x0F) - (operand & 0x0F) - (carryIn ? 0 : 1);
-			
+
 			// if it's negative, in binary it has to borrow from the high nibble
 			bool borrowToHigh = (low < 0);
 
@@ -426,21 +426,21 @@ struct CPU {
 			A = static_cast<Byte>(((high & 0x0F) << 4) | (low & 0x0F));
 		}
 	}
-	                 // A, X, Y        // Fetched value 
+	                 // A, X, Y        // Fetched value
 	void compare(Byte whatToCompare, Byte againstWhat, MEM& memory) {
-	    
+
 	    Byte result = whatToCompare - againstWhat;
-	    
+
 	    C = whatToCompare >= againstWhat ? 1 : 0;
-	    
+
 	    Z = whatToCompare == againstWhat ? 1 : 0;
-	    
+
 	    N = (result & 0x80) != 0;
 	}
-	              
-	
-	
-	
+
+
+
+
 
 
 
@@ -1391,7 +1391,7 @@ struct CPU {
 					std::bitset<8> resbits(operand);
 
 					cycles--;
-					
+
 					Z = (operand == 0);
 					N = resbits[7];
 				} break;
@@ -1515,10 +1515,10 @@ struct CPU {
 				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
 				} break;
 				case INS_CMP_ZPX: {
-				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				    compare(A, read(cycles, ZPX(cycles, memory), memory), memory);
 				} break;
 				case INS_CMP_AB: {
-				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
+				    compare(A, read(cycles, ZPY(cycles, memory), memory), memory);
 				} break;
 				case INS_CMP_ABX: {
 				    compare(A, read(cycles, ABXcross(cycles, memory), memory), memory);
@@ -1552,58 +1552,58 @@ struct CPU {
 				} break;
 				case INS_INC_ZP: {
 				    Word memoryLocation = static_cast<Word>(ZP(cycles, memory));
-				    
+
 				    Byte value = read(cycles, memoryLocation, memory);
-				    
+
 				    Byte result = value + 1;
-				    
+
 				    write(cycles, memoryLocation, result, memory);
-				    
+
 				    std::bitset<8> resbits(result);
 				    Z = (result == 0);
 				    N = resbits[7];
 				} break;
 				case INS_INC_ZPX: {
 				    Word memoryLocation = static_cast<Word>(ZPX(cycles, memory));
-				    
+
 				    Byte value = read(cycles, memoryLocation, memory);
-				    
+
 				    Byte result = value + 1;
-				    
+
 				    write(cycles, memoryLocation, result, memory);
-				    
+
 				    std::bitset<8> resbits(result);
 				    Z = (result == 0);
 				    N = resbits[7];
 				} break;
 				case INS_INC_AB: {
 				    Word memoryLocation = AB(cycles, memory);
-				    
+
 				    Byte value = read(cycles, memoryLocation, memory);
-				    
+
 				    Byte result = value + 1;
-				    
+
 				    cycles--;
-				    
+
 				    write(cycles, memoryLocation, result, memory);
-				    
+
 				    std::bitset<8> resbits(result);
 				    Z = (result == 0);
 				    N = resbits[7];
 				} break;
 				case INS_INC_ABX: {
 				    Word memoryLocation = ABX(cycles, memory);
-				    
+
 				    Byte value = read(cycles, memoryLocation, memory);
-				    
+
 				    Byte result = value + 1;
-				    
+
 				    cycles--;
-				    
+
 				    write(cycles, memoryLocation, result, memory);
-				    
+
 				    std::bitset<8> resbits(result);
-				    
+
 				    cycles--;
 				    Z = (result == 0);
 				    N = resbits[7];
@@ -1628,16 +1628,16 @@ CPU cpu;
 int main() {
 
 	cpu.powerOn(mem);
-    
+
     cpu.A = 0x80;
     cpu.X = 0x00;
     mem[0x1234] = 0x09;
-    
+
 	mem[0x8000] = CPU::INS_INC_ABX;
 	mem[0x8001] = 0x34;
 	mem[0x8002] = 0x12;
-	
-	
+
+
     cpu.execute(7, mem);
     std::cout << static_cast<int>(mem[0x1234]) << std::endl;
     std::cout << static_cast<int>(cpu.Z) << std::endl;
