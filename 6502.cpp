@@ -1,8 +1,8 @@
 #include <cstdint>
 #include <iostream>
 #include <bitset>
-#include <iomanip>
 #include <cstring>
+
 
 
 /* NOTE:
@@ -91,6 +91,8 @@ struct CPU {
 
 
 
+
+
 	Byte getstatus(const Byte B) const {
 		return (N << 7) |
 		(V << 6) |
@@ -120,26 +122,24 @@ struct CPU {
 	}
 
 	Byte Fetch(uint32_t& cycles, MEM& memory) {
-		// PC is where the next instruction is stored
 		Byte Data = memory[PC];
-		// PC is incremented, allowing the next use of PC to be the next instruction
 		PC++;
-		cycles--;
+		cycles++;
 		return Data;
 	}
 
 	static Byte read(uint32_t& cycles, uint32_t address, MEM& memory) {
 		Byte Data = memory[address];
-		cycles--;
+		cycles++;
 		return Data;
 	}
 
 	static void write(uint32_t& cycles, uint32_t address, Byte toWrite, MEM& memory) {
 		memory[address] = toWrite;
-		cycles--;
+		cycles++;
 	}
 
-	void setZN(Byte value) {
+	void setZN(const Byte& value) {
 		Z = (value == 0);
 		N = (value & 0x80) > 0;
 
@@ -160,7 +160,7 @@ struct CPU {
 	Byte ZPX(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
 		zeroPageAddress += X;
-		cycles--;
+		cycles++;
 
 		return zeroPageAddress;
 	}
@@ -168,7 +168,7 @@ struct CPU {
 	Byte ZPY(uint32_t& cycles, MEM& memory) {
 		Byte zeroPageAddress = Fetch(cycles, memory);
 		zeroPageAddress += Y;
-		cycles--;
+		cycles++;
 
 		return zeroPageAddress;
 	}
@@ -192,7 +192,7 @@ struct CPU {
 		Word add = combined + X;
 
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
-			cycles--;
+			cycles++;
 		}
 
 		return add;
@@ -222,7 +222,7 @@ struct CPU {
 		Word add = combined + Y;
 
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
-			cycles--;
+			cycles++;
 		}
 
 		return add;
@@ -246,7 +246,7 @@ struct CPU {
 		Byte operand = Fetch(cycles, memory);
 
 		Byte add = operand + X;
-		cycles--; //real hardware consumes a cycle here
+		cycles++; //real hardware consumes a cycle here
 		Byte highadd = add + 1;
 		Byte low = read(cycles, add, memory);
 		Byte high = read(cycles, highadd, memory);
@@ -270,7 +270,7 @@ struct CPU {
 		Word add = combined + Y;
 
 		if ((combined & 0xFF00) != (add & 0xFF00)) {
-			cycles--;
+			cycles++;
 		}
 
 
@@ -295,13 +295,13 @@ struct CPU {
 	static void pushToStack(uint32_t& cycles, Byte& SP, Byte whatToStack, MEM& memory) {
 		//SP lives 0x0100-0x01FF, since SP is initialised as 0xFD, 0x100 + 0xFD ensures it's within range of where the stack lives
 		memory[0x0100 + SP] = whatToStack;
-		cycles--;
 		SP--;
+		cycles++;
 	}
 
 	static Byte pullFromStack(uint32_t& cycles, Byte& SP, MEM& memory) {
 		SP++;
-		cycles--;
+		cycles++;
 		Byte op = memory[0x0100 + SP];
 		return op;
 
@@ -381,7 +381,8 @@ struct CPU {
 		Byte oldA = A;
 		Byte carryIn = C;
 
-		// This would bug if not set as a variable and I have no clue why...
+		// ~operand is promoted to int (e.g. ~0x05 == 0xFFFFFFFA), so truncate it back to a Byte
+		// before adding. Without this the carry calculation below is always wrong.
 		Byte invertedOperand = ~operand;
 
 		Word binarySum = static_cast<Word>(oldA) + invertedOperand + carryIn;
@@ -389,16 +390,17 @@ struct CPU {
 
 		Byte binaryResult = binarySum & 0xFF;
 
-
+		// On the NMOS 6502, Z, N, V and C in SBC all come from the binary calculation,
+		// even in decimal mode. Only the value written to A differs.
 		Z = (binaryResult == 0);
 
+		C = (binarySum > 0xFF);
+
+		V = (((oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
+
+		N = (binaryResult >> 7);
+
 		if (D == 0) {
-
-			C = (binarySum > 0xFF);
-
-			V = (((oldA ^ operand) & (oldA ^ binaryResult) & 0x80) >> 7);
-
-			N = (binaryResult >> 7);
 
 			A = binaryResult;
 
@@ -421,15 +423,13 @@ struct CPU {
 				high -= 6;
 			}
 
-			C = !borrowOut;
-
 			A = static_cast<Byte>(((high & 0x0F) << 4) | (low & 0x0F));
 		}
 	}
 	                 // A, X, Y        // Fetched value
-	void compare(Byte whatToCompare, Byte againstWhat, MEM& memory) {
+	void compare(Byte whatToCompare, Byte againstWhat) {
 
-	    Byte result = whatToCompare - againstWhat;
+	    const Byte result = whatToCompare - againstWhat;
 
 	    C = whatToCompare >= againstWhat ? 1 : 0;
 
@@ -438,9 +438,29 @@ struct CPU {
 	    N = (result & 0x80) != 0;
 	}
 
+	void branchIf(uint32_t& cycles, const Byte& flag, const bool set, MEM& memory) {
+
+		const Byte offset = Fetch(cycles, memory);
 
 
+		if (flag == set) {
 
+			const Word oldAddress = PC;
+
+
+			const auto signedOffset = static_cast<int8_t>(offset);
+
+			PC = static_cast<Word>(PC + signedOffset);
+
+
+			cycles++;
+
+			// Page crossing#
+			if ((oldAddress & 0xFF00) != (PC & 0xFF00)) {
+				cycles++;
+			}
+		}
+	}
 
 
 
@@ -514,7 +534,7 @@ struct CPU {
 		INS_BIT_ZP = 0x24,
 		INS_BIT_AB = 0x2C,
 		INS_JMP_AB = 0x4C,
-		INS_JMP_IND = 0x6C,			// How unique
+		INS_JMP_IND = 0x6C,
 		INS_ASL_A = 0x0A,
 		INS_ASL_ZP = 0x06,
 		INS_ASL_ZPX = 0x16,
@@ -572,1075 +592,1214 @@ struct CPU {
 		INS_INC_ZP = 0xE6,
 		INS_INC_ZPX = 0xF6,
 		INS_INC_AB = 0xEE,
-		INS_INC_ABX = 0xFE;
-
-	void execute(uint32_t cycles, MEM& memory) {
-		while (cycles > 0) {
-			Byte ins = Fetch(cycles, memory);
-
-			switch (ins) {
-				case INS_LDA_IM: {
-					A = IM(cycles, memory);
-					setZN(A);
-				} break;
-
-				case INS_LDA_ZP: {
-					A = read(cycles, ZP(cycles, memory), memory);
-					setZN(A);
-				} break;
-
-				case INS_LDA_ZPX: {
-					A = read(cycles, ZPX(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDA_AB: {
-					A = read(cycles, AB(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDA_ABX: {
-					A = read(cycles, ABXcross(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDA_ABY: {
-					A = read(cycles, ABYcross(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDA_IDX: {
-
-					A = read(cycles, IDX(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDA_IDY: {
-					A = read(cycles, IDYcross(cycles, memory), memory);
-					setZN(A);
-				} break;
-				case INS_LDX_IM: {
-					X = IM(cycles, memory);
-					setZN(X);
-				} break;
-				case INS_LDX_ZP: {
-					X = read(cycles, ZP(cycles, memory), memory);
-					setZN(X);
-				} break;
-				case INS_LDX_ZPY: {
-					X = read(cycles, ZPY(cycles, memory), memory);
-					setZN(X);
-				} break;
-				case INS_LDX_AB: {
-					X = read(cycles, AB(cycles, memory), memory);
-					setZN(X);
-				} break;
-				case INS_LDX_ABY: {
-					X = read(cycles, ABYcross(cycles, memory), memory);
-					setZN(X);
-				} break;
-				case INS_LDY_IM: {
-					Y = IM(cycles, memory);
-					setZN(Y);
-				} break;
-				case INS_LDY_ZP: {
-					Y = read(cycles, ZP(cycles, memory), memory);
-					setZN(Y);
-				} break;
-				case INS_LDY_ZPX: {
-					Y = read(cycles, ZPX(cycles, memory), memory);
-					setZN(Y);
-				} break;
-				case INS_LDY_AB: {
-					Y = read(cycles, AB(cycles, memory), memory);
-					setZN(Y);
-				} break;
-				case INS_LDY_ABX: {
-					Y = read(cycles, ABXcross(cycles, memory), memory);
-					setZN(Y);
-				} break;
-				case INS_STA_ZP: {
-					write(cycles, ZP(cycles, memory), A, memory);
-				} break;
-				case INS_STA_ZPX: {
-					write(cycles, ZPX(cycles, memory), A, memory);
-				} break;
-				case INS_STA_AB: {
-					write(cycles, AB(cycles, memory), A, memory);
-
-				} break;
-				case INS_STA_ABX: {
-					write(cycles, ABX(cycles, memory), A, memory);
-					cycles--;
-				} break;
-				case INS_STA_ABY: {
-					write(cycles, ABY(cycles, memory), A, memory);
-					cycles--;
-				} break;
-				case INS_STA_IDX: {
-					write(cycles, IDX(cycles, memory), A, memory);
-				} break;
-				case INS_STA_IDY: {
-					write(cycles, IDY(cycles, memory), A, memory);
-					cycles--;
-				} break;
-				case INS_STX_ZP: {
-					write(cycles, ZP(cycles, memory), X, memory);
-				} break;
-				case INS_STX_ZPY: {
-					write(cycles, ZPY(cycles, memory), X, memory);
-				} break;
-				case INS_STX_AB: {
-					write(cycles, AB(cycles, memory), X, memory);
-				} break;
-				case INS_STY_ZP: {
-					write(cycles, ZP(cycles, memory), Y, memory);
-				} break;
-				case INS_STY_ZPX: {
-					write(cycles, ZPX(cycles, memory), Y, memory);
-				} break;
-				case INS_STY_AB: {
-					write(cycles, AB(cycles, memory), Y, memory);
-				} break;
-				case INS_TAX_I: {
-					X = A;
-					cycles--;
-					setZN(X);
-				} break;
-				case INS_TAY_I: {
-					Y = A;
-					cycles--;
-					setZN(Y);
-				} break;
-				case INS_TSX_I: {
-					X = SP;
-					cycles--;
-					setZN(X);
-				} break;
-				case INS_TXA_I: {
-					A = X;
-					cycles--;
-					setZN(A);
-				} break;
-				case INS_TXS_I: {
-					SP = X;
-					cycles--;
-				} break;
-				case INS_TYA_I: {
-					A = Y;
-					cycles--;
-					setZN(A);
-				} break;
-				case INS_PHA_I: {
-					pushToStack(cycles, SP, A, memory);
-					cycles--;
-				} break;
-				case INS_PHP_I: {
-					pushToStack(cycles, SP, getstatus(0), memory);
-					cycles--;
-				} break;
-				case INS_PLA_I: {
-					A = pullFromStack(cycles, SP, memory);
-					cycles--;
-					setZN(A);
-					cycles--;
-				} break;
-				case INS_PLP_I: {
-					Byte PLP = pullFromStack(cycles, SP, memory);
-					cycles--;
-					std::bitset<8> bits(PLP);
-
-
-					C = bits[0];
-					Z = bits[1];
-					I = bits[2];
-					D = bits[3];
-					V = bits[6];
-					N = bits[7];
-					cycles--;
-
-
-				} break;
-				case INS_NOP_I: {
-					// No operation
-					cycles--;
-				} break;
-				case INS_AND_IM: {
-					Byte comp = IM(cycles, memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_ZP: {
-					Byte comp = read(cycles, ZP(cycles, memory), memory);
-
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_ZPX: {
-					Byte comp = read(cycles, ZPX(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-
-				} break;
-				case INS_AND_AB: {
-					Byte comp = read(cycles, AB(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_ABX: {
-					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_ABY: {
-					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_IDX: {
-					Byte comp = read(cycles, IDX(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_AND_IDY: {
-					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
-
-					A = comp & A;
-
-					setZN(A);
-				} break;
-				case INS_ORA_IM: {
-					Byte comp = IM(cycles, memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_ZP: {
-					Byte comp = read(cycles, ZP(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_ZPX: {
-					Byte comp = read(cycles, ZPX(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_AB: {
-					Byte comp = read(cycles, AB(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_ABX: {
-					Byte comp = read(cycles, ABXcross(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_ABY: {
-					Byte comp = read(cycles, ABYcross(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_IDX: {
-					Byte comp = read(cycles, IDX(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_ORA_IDY: {
-					Byte comp = read(cycles, IDYcross(cycles, memory), memory);
-
-					A = A | comp;
-
-					setZN(A);
-				} break;
-				case INS_EOR_IM: {
-					A = A ^ IM(cycles, memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_ZP: {
-					A = A ^ read(cycles, ZP(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_ZPX: {
-					A = A ^ read(cycles, ZPX(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_AB: {
-					A = A ^ read(cycles, AB(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_ABX: {
-					A = A ^ read(cycles, ABXcross(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_ABY: {
-					A = A ^ read(cycles, ABYcross(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_IDX: {
-					A = A ^ read(cycles, IDX(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_EOR_IDY: {
-					A = A ^ read(cycles, IDYcross(cycles, memory), memory);
-
-					setZN(A);
-				} break;
-				case INS_BIT_ZP: {
-					Byte result = read(cycles, ZP(cycles, memory), memory);
+		INS_INC_ABX = 0xFE,
+		INS_INX_I = 0xE8,
+		INS_INY_I = 0xC8,
+		INS_DEC_ZP = 0xC6,
+		INS_DEC_ZPX = 0xD6,
+		INS_DEC_AB = 0xCE,
+		INS_DEC_ABX = 0xDE,
+		INS_DEX_I = 0xCA,
+		INS_DEY_I = 0x88,
+		INS_BCC_REL = 0x90,
+		INS_BCS_REL = 0xB0,
+		INS_BEQ_REL = 0xF0,
+		INS_BMI_REL = 0x30,
+		INS_BNE_REL = 0xD0,
+		INS_BPL_REL = 0x10,
+		INS_BVC_REL = 0x50,
+		INS_BVS_REL = 0x70,
+		INS_CLC_I = 0x18,
+		INS_CLD_I = 0xD8,
+		INS_CLI_I = 0x58,
+		INS_CLV_I = 0xB8,
+		INS_SEC_I = 0x38,
+		INS_SED_I = 0xF8,
+		INS_SEI_I = 0x78;
+
+
+	uint32_t execute(MEM& memory) {
+		uint32_t cycles = 0;
+
+		switch (const Byte opcode = Fetch(cycles, memory)) {
+			case INS_LDA_IM: {
+				A = IM(cycles, memory);
+				setZN(A);
+			} break;
+
+			case INS_LDA_ZP: {
+				A = read(cycles, ZP(cycles, memory), memory);
+				setZN(A);
+			} break;
+
+			case INS_LDA_ZPX: {
+				A = read(cycles, ZPX(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDA_AB: {
+				A = read(cycles, AB(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDA_ABX: {
+				A = read(cycles, ABXcross(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDA_ABY: {
+				A = read(cycles, ABYcross(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDA_IDX: {
+
+				A = read(cycles, IDX(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDA_IDY: {
+				A = read(cycles, IDYcross(cycles, memory), memory);
+				setZN(A);
+			} break;
+			case INS_LDX_IM: {
+				X = IM(cycles, memory);
+				setZN(X);
+			} break;
+			case INS_LDX_ZP: {
+				X = read(cycles, ZP(cycles, memory), memory);
+				setZN(X);
+			} break;
+			case INS_LDX_ZPY: {
+				X = read(cycles, ZPY(cycles, memory), memory);
+				setZN(X);
+			} break;
+			case INS_LDX_AB: {
+				X = read(cycles, AB(cycles, memory), memory);
+				setZN(X);
+			} break;
+			case INS_LDX_ABY: {
+				X = read(cycles, ABYcross(cycles, memory), memory);
+				setZN(X);
+			} break;
+			case INS_LDY_IM: {
+				Y = IM(cycles, memory);
+				setZN(Y);
+			} break;
+			case INS_LDY_ZP: {
+				Y = read(cycles, ZP(cycles, memory), memory);
+				setZN(Y);
+			} break;
+			case INS_LDY_ZPX: {
+				Y = read(cycles, ZPX(cycles, memory), memory);
+				setZN(Y);
+			} break;
+			case INS_LDY_AB: {
+				Y = read(cycles, AB(cycles, memory), memory);
+				setZN(Y);
+			} break;
+			case INS_LDY_ABX: {
+				Y = read(cycles, ABXcross(cycles, memory), memory);
+				setZN(Y);
+			} break;
+			case INS_STA_ZP: {
+				write(cycles, ZP(cycles, memory), A, memory);
+			} break;
+			case INS_STA_ZPX: {
+				write(cycles, ZPX(cycles, memory), A, memory);
+			} break;
+			case INS_STA_AB: {
+				write(cycles, AB(cycles, memory), A, memory);
+
+			} break;
+			case INS_STA_ABX: {
+				write(cycles, ABX(cycles, memory), A, memory);
+				cycles++;
+			} break;
+			case INS_STA_ABY: {
+				write(cycles, ABY(cycles, memory), A, memory);
+				cycles++;
+			} break;
+			case INS_STA_IDX: {
+				write(cycles, IDX(cycles, memory), A, memory);
+			} break;
+			case INS_STA_IDY: {
+				write(cycles, IDY(cycles, memory), A, memory);
+				cycles++;
+			} break;
+			case INS_STX_ZP: {
+				write(cycles, ZP(cycles, memory), X, memory);
+			} break;
+			case INS_STX_ZPY: {
+				write(cycles, ZPY(cycles, memory), X, memory);
+			} break;
+			case INS_STX_AB: {
+				write(cycles, AB(cycles, memory), X, memory);
+			} break;
+			case INS_STY_ZP: {
+				write(cycles, ZP(cycles, memory), Y, memory);
+			} break;
+			case INS_STY_ZPX: {
+				write(cycles, ZPX(cycles, memory), Y, memory);
+			} break;
+			case INS_STY_AB: {
+				write(cycles, AB(cycles, memory), Y, memory);
+			} break;
+			case INS_TAX_I: {
+				X = A;
+				cycles++;
+				setZN(X);
+			} break;
+			case INS_TAY_I: {
+				Y = A;
+				cycles++;
+				setZN(Y);
+			} break;
+			case INS_TSX_I: {
+				X = SP;
+				cycles++;
+				setZN(X);
+			} break;
+			case INS_TXA_I: {
+				A = X;
+				cycles++;
+				setZN(A);
+			} break;
+			case INS_TXS_I: {
+				SP = X;
+				cycles++;
+			} break;
+			case INS_TYA_I: {
+				A = Y;
+				cycles++;
+				setZN(A);
+			} break;
+			case INS_PHA_I: {
+				pushToStack(cycles, SP, A, memory);
+				cycles++;
+			} break;
+			case INS_PHP_I: {
+				// PHP always pushes the B flag (bit 4) set, same as BRK
+				pushToStack(cycles, SP, getstatus(1), memory);
+				cycles++;
+			} break;
+			case INS_PLA_I: {
+				A = pullFromStack(cycles, SP, memory);
+				cycles++;
+				setZN(A);
+				cycles++;
+			} break;
+			case INS_PLP_I: {
+				Byte PLP = pullFromStack(cycles, SP, memory);
+				cycles++;
+				std::bitset<8> bits(PLP);
+
+
+				C = bits[0];
+				Z = bits[1];
+				I = bits[2];
+				D = bits[3];
+				V = bits[6];
+				N = bits[7];
+				cycles++;
+
+
+			} break;
+			case INS_NOP_I: {
+				// No operation
+				cycles++;
+			} break;
+			case INS_AND_IM: {
+				Byte comp = IM(cycles, memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_ZP: {
+				Byte comp = read(cycles, ZP(cycles, memory), memory);
+
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_ZPX: {
+				Byte comp = read(cycles, ZPX(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+
+			} break;
+			case INS_AND_AB: {
+				Byte comp = read(cycles, AB(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_ABX: {
+				Byte comp = read(cycles, ABXcross(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_ABY: {
+				Byte comp = read(cycles, ABYcross(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_IDX: {
+				Byte comp = read(cycles, IDX(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_AND_IDY: {
+				Byte comp = read(cycles, IDYcross(cycles, memory), memory);
+
+				A = comp & A;
+
+				setZN(A);
+			} break;
+			case INS_ORA_IM: {
+				Byte comp = IM(cycles, memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_ZP: {
+				Byte comp = read(cycles, ZP(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_ZPX: {
+				Byte comp = read(cycles, ZPX(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_AB: {
+				Byte comp = read(cycles, AB(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_ABX: {
+				Byte comp = read(cycles, ABXcross(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_ABY: {
+				Byte comp = read(cycles, ABYcross(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_IDX: {
+				Byte comp = read(cycles, IDX(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_ORA_IDY: {
+				Byte comp = read(cycles, IDYcross(cycles, memory), memory);
+
+				A = A | comp;
+
+				setZN(A);
+			} break;
+			case INS_EOR_IM: {
+				A = A ^ IM(cycles, memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_ZP: {
+				A = A ^ read(cycles, ZP(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_ZPX: {
+				A = A ^ read(cycles, ZPX(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_AB: {
+				A = A ^ read(cycles, AB(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_ABX: {
+				A = A ^ read(cycles, ABXcross(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_ABY: {
+				A = A ^ read(cycles, ABYcross(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_IDX: {
+				A = A ^ read(cycles, IDX(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_EOR_IDY: {
+				A = A ^ read(cycles, IDYcross(cycles, memory), memory);
+
+				setZN(A);
+			} break;
+			case INS_BIT_ZP: {
+				Byte result = read(cycles, ZP(cycles, memory), memory);
+
+				std::bitset<8> bits(result);
+
+				N = bits[7];
+				V = bits[6];
+				Z = ((A & result) == 0);
+			} break;
+			case INS_BIT_AB: {
+				Byte result = read(cycles, AB(cycles, memory), memory);
+
+				std::bitset<8> bits(result);
+
+				N = bits[7];
+				V = bits[6];
+				Z = ((A & result) == 0);
+			} break;
+			case INS_JMP_AB: {
+
+				Word set = AB(cycles, memory);
+
+
+				PC = set;
+
+
+			} break;
+			case INS_JMP_IND: {
+
+				Byte low = Fetch(cycles, memory);
+				Byte high = Fetch(cycles, memory);
+
+				Word add = (static_cast<Word>(high) << 8) | low;
 
-					std::bitset<8> bits(result);
+				Byte PClow = read(cycles, add, memory);
 
-					N = bits[7];
-					V = bits[6];
-					Z = ((A & result) == 0);
-				} break;
-				case INS_BIT_AB: {
-					Byte result = read(cycles, AB(cycles, memory), memory);
+				Byte PChigh;
 
-					std::bitset<8> bits(result);
+				if ((add & 0xFF) == 0xFF) {
+					PChigh = read(cycles, (add & 0xFF00), memory);
+				}
+				else {
+					PChigh = read(cycles, add + 1, memory);
+				}
 
-					N = bits[7];
-					V = bits[6];
-					Z = ((A & result) == 0);
-				} break;
-				case INS_JMP_AB: {
+				PC = (static_cast<Word>(PChigh) << 8) | PClow;
 
-					Word set = AB(cycles, memory);
+			} break;
+			case INS_ASL_A: {
+				std::bitset<8> bits(A);
 
+				C = bits[7];
 
-					PC = set;
+				A = A << 1;
 
+				cycles++;
 
-				} break;
-				case INS_JMP_IND: {
+				std::bitset<8> resbits(A);
 
-					Byte low = Fetch(cycles, memory);
-					Byte high = Fetch(cycles, memory);
+				N = resbits[7];
+				Z = (A == 0);
 
-					Word add = (static_cast<Word>(high) << 8) | low;
+			} break;
+			case INS_ASL_ZP: {
 
-					Byte PClow = read(cycles, add, memory);
+				Byte address = ZP(cycles, memory);
 
-					Byte PChigh;
+				Byte temp = read(cycles, address, memory);
 
-					if ((add & 0xFF) == 0xFF) {
-						PChigh = read(cycles, (add & 0xFF00), memory);
-					}
-					else {
-						PChigh = read(cycles, add + 1, memory);
-					}
+				std::bitset<8> bits(temp);
 
-					PC = (static_cast<Word>(PChigh) << 8) | PClow;
+				C = bits[7];
 
-				} break;
-				case INS_ASL_A: {
-					std::bitset<8> bits(A);
+				Byte shift = temp << 1;
 
-					C = bits[7];
+				write(cycles, address, shift, memory);
 
-					A = A << 1;
+				std::bitset<8> resbits(shift);
 
-					cycles--;
+				N = resbits[7];
+				Z = (shift == 0);
 
-					std::bitset<8> resbits(A);
+				cycles++;
 
-					N = resbits[7];
-					Z = (A == 0);
 
-				} break;
-				case INS_ASL_ZP: {
+			} break;
+			case INS_ASL_ZPX: {
 
-					Byte address = ZP(cycles, memory);
+				Byte address = ZPX(cycles, memory);
 
-					Byte temp = read(cycles, address, memory);
+				Byte temp = read(cycles, address, memory);
 
-					std::bitset<8> bits(temp);
+				std::bitset<8> bits(temp);
 
-					C = bits[7];
+				C = bits[7];
 
-					Byte shift = temp << 1;
+				Byte shift = temp << 1;
 
-					write(cycles, address, shift, memory);
+				write(cycles, address, shift, memory);
 
-					std::bitset<8> resbits(shift);
+				std::bitset<8> resbits(shift);
 
-					N = resbits[7];
-					Z = (shift == 0);
+				N = resbits[7];
+				Z = (shift == 0);
 
-					cycles--;
+				cycles++;
+			} break;
+			case INS_ASL_AB: {
+				Word address = AB(cycles, memory);
 
+				Byte temp = read(cycles, address, memory);
 
-				} break;
-				case INS_ASL_ZPX: {
+				std::bitset<8> bits(temp);
 
-					Byte address = ZPX(cycles, memory);
+				C = bits[7];
 
-					Byte temp = read(cycles, address, memory);
+				Byte shift = temp << 1;
 
-					std::bitset<8> bits(temp);
+				write(cycles, address, shift, memory);
 
-					C = bits[7];
+				std::bitset<8> resbits(shift);
 
-					Byte shift = temp << 1;
+				N = resbits[7];
+				Z = (shift == 0);
 
-					write(cycles, address, shift, memory);
+				cycles++;
+			} break;
+			case INS_ASL_ABX: {
 
-					std::bitset<8> resbits(shift);
+				Word address = ABX(cycles, memory);
 
-					N = resbits[7];
-					Z = (shift == 0);
+				Byte temp = read(cycles, address, memory);
 
-					cycles--;
-				} break;
-				case INS_ASL_AB: {
-					Word address = AB(cycles, memory);
+				std::bitset<8> bits(temp);
 
-					Byte temp = read(cycles, address, memory);
+				C = bits[7];
+				cycles++;
 
-					std::bitset<8> bits(temp);
+				Byte shift = temp << 1;
 
-					C = bits[7];
+				cycles++;
 
-					Byte shift = temp << 1;
+				write(cycles, address, shift, memory);
 
-					write(cycles, address, shift, memory);
+				std::bitset<8> resbits(shift);
 
-					std::bitset<8> resbits(shift);
+				N = resbits[7];
+				Z = (shift == 0);
+			} break;
+			case INS_LSR_A: {
+				std::bitset<8> bits(A);
 
-					N = resbits[7];
-					Z = (shift == 0);
+				C = bits[0];
 
-					cycles--;
-				} break;
-				case INS_ASL_ABX: {
+				A = A >> 1;
 
-					Word address = ABX(cycles, memory);
+				cycles++;
 
-					Byte temp = read(cycles, address, memory);
+				N = 0;
+				Z = (A == 0);
+			} break;
+			case INS_LSR_ZP: {
 
-					std::bitset<8> bits(temp);
+				Word address = ZP(cycles, memory);
 
-					C = bits[7];
-					cycles--;
+				Byte temp = read(cycles, address, memory);
 
-					Byte shift = temp << 1;
+				std::bitset<8> bits(temp);
 
-					cycles--;
+				C = bits[0];
 
-					write(cycles, address, shift, memory);
+				Byte shift = temp >> 1;
 
-					std::bitset<8> resbits(shift);
+				cycles++;
 
-					N = resbits[7];
-					Z = (shift == 0);
-				} break;
-				case INS_LSR_A: {
-					std::bitset<8> bits(A);
+				write(cycles, address, shift, memory);
 
-					C = bits[0];
+				N = 0;
+				Z = (shift == 0);
+			} break;
+			case INS_LSR_ZPX: {
+				Word address = ZPX(cycles, memory);
 
-					A = A >> 1;
+				Byte temp = read(cycles, address, memory);
 
-					cycles--;
+				std::bitset<8> bits(temp);
 
-					N = 0;
-					Z = (A == 0);
-				} break;
-				case INS_LSR_ZP: {
+				C = bits[0];
 
-					Word address = ZP(cycles, memory);
+				Byte shift = temp >> 1;
 
-					Byte temp = read(cycles, address, memory);
+				cycles++;
 
-					std::bitset<8> bits(temp);
+				write(cycles, address, shift, memory);
 
-					C = bits[0];
+				N = 0;
+				Z = (shift == 0);
+			} break;
+			case INS_LSR_AB: {
+				Word address = AB(cycles, memory);
 
-					Byte shift = temp >> 1;
+				Byte temp = read(cycles, address, memory);
 
-					cycles--;
+				std::bitset<8> bits(temp);
 
-					write(cycles, address, shift, memory);
+				C = bits[0];
 
-					N = 0;
-					Z = (shift == 0);
-				} break;
-				case INS_LSR_ZPX: {
-					Word address = ZPX(cycles, memory);
+				Byte shift = temp >> 1;
 
-					Byte temp = read(cycles, address, memory);
+				cycles++;
 
-					std::bitset<8> bits(temp);
+				write(cycles, address, shift, memory);
 
-					C = bits[0];
 
-					Byte shift = temp >> 1;
+				N = 0;
+				Z = (shift == 0);
+			} break;
+			case INS_LSR_ABX: {
 
-					cycles--;
+				Word address = ABX(cycles, memory);
 
-					write(cycles, address, shift, memory);
+				Byte temp = read(cycles, address, memory);
 
-					N = 0;
-					Z = (shift == 0);
-				} break;
-				case INS_LSR_AB: {
-					Word address = AB(cycles, memory);
+				std::bitset<8> bits(temp);
 
-					Byte temp = read(cycles, address, memory);
+				C = bits[0];
 
-					std::bitset<8> bits(temp);
+				Byte shift = temp >> 1;
 
-					C = bits[0];
+				cycles++;
 
-					Byte shift = temp >> 1;
+				write(cycles, address, shift, memory);
 
-					cycles--;
 
-					write(cycles, address, shift, memory);
+				N = 0;
+				Z = (shift == 0);
 
+				cycles++;
 
-					N = 0;
-					Z = (shift == 0);
-				} break;
-				case INS_LSR_ABX: {
+			} break;
+			case INS_ROL_A: {
+				std::bitset<8> bits(A);
 
-					Word address = ABX(cycles, memory);
+				Byte temp = C;
 
-					Byte temp = read(cycles, address, memory);
+				C = bits[7];
 
-					std::bitset<8> bits(temp);
+				A = A << 1;
 
-					C = bits[0];
+				cycles++;
 
-					Byte shift = temp >> 1;
+				A = A | temp;
 
-					cycles--;
+				std::bitset<8> resbits(A);
 
-					write(cycles, address, shift, memory);
+				N = resbits[7];
+				Z = (A == 0);
 
+			} break;
+			case INS_ROL_ZP: {
 
-					N = 0;
-					Z = (shift == 0);
+				Byte address = ZP(cycles, memory);
 
-					cycles--;
+				Byte temp = C;
 
-				} break;
-				case INS_ROL_A: {
-					std::bitset<8> bits(A);
+				Byte operand = read(cycles, address, memory);
 
-					Byte temp = C;
+				std::bitset<8> bits(operand);
 
-					C = bits[7];
+				C = bits[7];
 
-					A = A << 1;
+				operand = operand << 1;
 
-					cycles--;
+				cycles++;
 
-					A = A | temp;
+				operand = operand | temp;
 
-					std::bitset<8> resbits(A);
+				write(cycles, address, operand, memory);
 
-					N = resbits[7];
-					Z = (A == 0);
+				std::bitset<8> resbits(operand);
 
-				} break;
-				case INS_ROL_ZP: {
+				N = resbits[7];
+				Z = (operand == 0);
+			} break;
+			case INS_ROL_ZPX: {
 
-					Byte address = ZP(cycles, memory);
+				Byte address = ZPX(cycles, memory);
 
-					Byte temp = C;
+				Byte temp = C;
 
-					Byte operand = read(cycles, address, memory);
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(operand);
+				std::bitset<8> bits(operand);
 
-					C = bits[7];
+				C = bits[7];
 
-					operand = operand << 1;
+				operand = operand << 1;
 
-					cycles--;
+				cycles++;
 
-					operand = operand | temp;
+				operand = operand | temp;
 
-					write(cycles, address, operand, memory);
+				write(cycles, address, operand, memory);
 
-					std::bitset<8> resbits(operand);
+				std::bitset<8> resbits(operand);
 
-					N = resbits[7];
-					Z = (operand == 0);
-				} break;
-				case INS_ROL_ZPX: {
+				N = resbits[7];
+				Z = (operand == 0);
+			} break;
+			case INS_ROL_AB: {
+				Word address = AB(cycles, memory);
 
-					Byte address = ZPX(cycles, memory);
+				Byte temp = C;
 
-					Byte temp = C;
+				Byte operand = read(cycles, address, memory);
 
-					Byte operand = read(cycles, address, memory);
+				std::bitset<8> bits(operand);
 
-					std::bitset<8> bits(operand);
+				C = bits[7];
 
-					C = bits[7];
+				operand = operand << 1;
 
-					operand = operand << 1;
+				cycles++;
 
-					cycles--;
+				operand = operand | temp;
 
-					operand = operand | temp;
+				write(cycles, address, operand, memory);
 
-					write(cycles, address, operand, memory);
+				std::bitset<8> resbits(operand);
 
-					std::bitset<8> resbits(operand);
+				N = resbits[7];
+				Z = (operand == 0);
+			} break;
+			case INS_ROL_ABX: {
 
-					N = resbits[7];
-					Z = (operand == 0);
-				} break;
-				case INS_ROL_AB: {
-					Word address = AB(cycles, memory);
+				Word address = ABX(cycles, memory);
 
-					Byte temp = C;
+				Byte temp = C;
 
-					Byte operand = read(cycles, address, memory);
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(operand);
+				std::bitset<8> bits(operand);
 
-					C = bits[7];
+				C = bits[7];
 
-					operand = operand << 1;
+				operand = operand << 1;
 
-					cycles--;
+				cycles++;
 
-					operand = operand | temp;
+				operand = operand | temp;
 
-					write(cycles, address, operand, memory);
+				cycles++;
 
-					std::bitset<8> resbits(operand);
+				write(cycles, address, operand, memory);
 
-					N = resbits[7];
-					Z = (operand == 0);
-				} break;
-				case INS_ROL_ABX: {
+				std::bitset<8> resbits(operand);
 
-					Word address = ABX(cycles, memory);
+				N = resbits[7];
+				Z = (operand == 0);
+			} break;
+			case INS_ROR_A: {
+				Byte temp = C;
 
-					Byte temp = C;
+				std::bitset<8> bits(A);
 
-					Byte operand = read(cycles, address, memory);
+				C = bits[0];
 
-					std::bitset<8> bits(operand);
+				A = A >> 1;
 
-					C = bits[7];
+				A = A | (temp << 7);
 
-					operand = operand << 1;
+				cycles++;
 
-					cycles--;
+				std::bitset<8> resbits(A);
 
-					operand = operand | temp;
+				N = resbits[7];
+				Z = (A == 0);
 
-					cycles--;
+			} break;
+			case INS_ROR_ZP: {
 
-					write(cycles, address, operand, memory);
+				Byte temp = C;
 
-					std::bitset<8> resbits(operand);
+				Byte address = ZP(cycles, memory);
 
-					N = resbits[7];
-					Z = (operand == 0);
-				} break;
-				case INS_ROR_A: {
-					Byte temp = C;
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(A);
+				std::bitset<8> bits(operand);
 
-					C = bits[0];
+				C = bits[0];
 
-					A = A >> 1;
+				operand = operand >> 1;
 
-					A = A | (temp << 7);
+				cycles++;
 
-					cycles--;
+				operand = operand | (temp << 7);
 
-					std::bitset<8> resbits(A);
+				write(cycles, address, operand, memory);
 
-					N = resbits[7];
-					Z = (A == 0);
+				std::bitset<8> resbits(operand);
 
-				} break;
-				case INS_ROR_ZP: {
+				Z = (operand == 0);
+				N = resbits[7];
+			} break;
+			case INS_ROR_ZPX: {
 
-					Byte temp = C;
+				Byte temp = C;
 
-					Byte address = ZP(cycles, memory);
+				Byte address = ZPX(cycles, memory);
 
-					Byte operand = read(cycles, address, memory);
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(operand);
+				std::bitset<8> bits(operand);
 
-					C = bits[0];
+				C = bits[0];
 
-					operand = operand >> 1;
+				operand = operand >> 1;
 
-					cycles--;
+				cycles++;
 
-					operand = operand | (temp << 7);
+				operand = operand | (temp << 7);
 
-					write(cycles, address, operand, memory);
+				write(cycles, address, operand, memory);
 
-					std::bitset<8> resbits(operand);
+				std::bitset<8> resbits(operand);
 
-					Z = (operand == 0);
-					N = resbits[7];
-				} break;
-				case INS_ROR_ZPX: {
+				Z = (operand == 0);
+				N = resbits[7];
 
-					Byte temp = C;
+			} break;
+			case INS_ROR_AB: {
+				Byte temp = C;
 
-					Byte address = ZPX(cycles, memory);
+				Word address = AB(cycles, memory);
 
-					Byte operand = read(cycles, address, memory);
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(operand);
+				std::bitset<8> bits(operand);
 
-					C = bits[0];
+				C = bits[0];
 
-					operand = operand >> 1;
+				operand = operand >> 1;
 
-					cycles--;
+				cycles++;
 
-					operand = operand | (temp << 7);
+				operand = operand | (temp << 7);
 
-					write(cycles, address, operand, memory);
+				write(cycles, address, operand, memory);
 
-					std::bitset<8> resbits(operand);
+				std::bitset<8> resbits(operand);
 
-					Z = (operand == 0);
-					N = resbits[7];
+				Z = (operand == 0);
+				N = resbits[7];
+			} break;
+			case INS_ROR_ABX: {
 
-				} break;
-				case INS_ROR_AB: {
-					Byte temp = C;
+				Byte temp = C;
 
-					Word address = AB(cycles, memory);
+				Word address = ABX(cycles, memory);
 
-					Byte operand = read(cycles, address, memory);
+				Byte operand = read(cycles, address, memory);
 
-					std::bitset<8> bits(operand);
+				std::bitset<8> bits(operand);
 
-					C = bits[0];
+				C = bits[0];
 
-					operand = operand >> 1;
+				operand = operand >> 1;
 
-					cycles--;
+				cycles++;
 
-					operand = operand | (temp << 7);
+				operand = operand | (temp << 7);
 
-					write(cycles, address, operand, memory);
+				write(cycles, address, operand, memory);
 
-					std::bitset<8> resbits(operand);
+				std::bitset<8> resbits(operand);
 
-					Z = (operand == 0);
-					N = resbits[7];
-				} break;
-				case INS_ROR_ABX: {
+				cycles++;
 
-					Byte temp = C;
+				Z = (operand == 0);
+				N = resbits[7];
+			} break;
+			case INS_JSR_AB: {
+				Byte low = Fetch(cycles, memory);
 
-					Word address = ABX(cycles, memory);
+				Byte high = Fetch(cycles, memory);
 
-					Byte operand = read(cycles, address, memory);
+				// Address to return to
+				Word address = PC - 1;
 
-					std::bitset<8> bits(operand);
+				cycles++;
 
-					C = bits[0];
+				pushToStack(cycles, SP, (address >> 8) & 0xFF, memory);
+				pushToStack(cycles, SP, (address & 0xFF), memory);
 
-					operand = operand >> 1;
+				PC = low | (static_cast<Word>(high) << 8);
 
-					cycles--;
+			} break;
+			case INS_RTS_I: {
+				Byte low = pullFromStack(cycles, SP, memory);
+				cycles++;
+				Byte high = pullFromStack(cycles, SP, memory);
+				cycles++;
+				PC = low | (static_cast<Word>(high) << 8);
+				cycles++;
+				PC++;
+			} break;
+			case INS_BRK_I: {
+				Fetch(cycles, memory);
 
-					operand = operand | (temp << 7);
+				Word returnAddress = PC;
+				pushToStack(cycles, SP, (returnAddress >> 8) & 0xFF, memory);
+				pushToStack(cycles, SP, returnAddress & 0xFF, memory);
+				pushToStack(cycles, SP, getstatus(1), memory);
 
-					write(cycles, address, operand, memory);
 
-					std::bitset<8> resbits(operand);
+				I = 1;
 
-					cycles--;
+				Byte low = read(cycles, 0xFFFE, memory);
+				Byte high = read(cycles, 0xFFFF, memory);
 
-					Z = (operand == 0);
-					N = resbits[7];
-				} break;
-				case INS_JSR_AB: {
-					Byte low = Fetch(cycles, memory);
+				PC = low | (high << 8);
+			} break;
+			case INS_RTI_I: {
+				Byte status = pullFromStack(cycles, SP, memory);
 
-					Byte high = Fetch(cycles, memory);
+				Byte low = pullFromStack(cycles, SP, memory);
 
-					// Address to return to
-					Word address = PC - 1;
+				Byte high = pullFromStack(cycles, SP, memory);
 
-					cycles--;
+				std::bitset<8> bits(status);
 
-					pushToStack(cycles, SP, (address >> 8) & 0xFF, memory);
-					pushToStack(cycles, SP, (address & 0xFF), memory);
+				C = bits[0];
+				Z = bits[1];
+				I = bits[2];
+				D = bits[3];
+				V = bits[6];
+				N = bits[7];
+				cycles++;
 
-					PC = low | (static_cast<Word>(high) << 8);
+				PC = low | (static_cast<Word>(high) << 8);
 
-				} break;
-				case INS_RTS_I: {
-					Byte low = pullFromStack(cycles, SP, memory);
-					cycles--;
-					Byte high = pullFromStack(cycles, SP, memory);
-					cycles--;
-					PC = low | (static_cast<Word>(high) << 8);
-					cycles--;
-					PC++;
-				} break;
-				case INS_BRK_I: {
-					Fetch(cycles, memory);
+				cycles++;
+			} break;
+			case INS_ADC_IM: {
+				ADC(IM(cycles, memory));
+			} break;
+			case INS_ADC_ZP: {
+				ADC(read(cycles, ZP(cycles, memory), memory));
+			} break;
+			case INS_ADC_ZPX: {
+				ADC(read(cycles, ZPX(cycles, memory), memory));
 
-					Word returnAddress = PC;
-					pushToStack(cycles, SP, (returnAddress >> 8) & 0xFF, memory);
-					pushToStack(cycles, SP, returnAddress & 0xFF, memory);
-					pushToStack(cycles, SP, getstatus(1), memory);
+			} break;
+			case INS_ADC_AB: {
+				ADC(read(cycles, AB(cycles, memory), memory));
 
+			} break;
+			case INS_ADC_ABX: {
+				ADC(read(cycles, ABXcross(cycles, memory), memory));
 
-					I = 1;
+			} break;
+			case INS_ADC_ABY: {
+				ADC(read(cycles, ABYcross(cycles, memory), memory));
+			} break;
+			case INS_ADC_IDX: {
+				ADC(read(cycles, IDX(cycles, memory), memory));
+			} break;
+			case INS_ADC_IDY: {
+				ADC(read(cycles, IDYcross(cycles, memory), memory));
+			} break;
+			case INS_SBC_IM: {
+				SBC(IM(cycles, memory));
+			} break;
+			case INS_SBC_ZP: {
+				SBC(read(cycles, ZP(cycles, memory), memory));
+			} break;
+			case INS_SBC_ZPX: {
+				SBC(read(cycles, ZPX(cycles, memory), memory));
+			} break;
+			case INS_SBC_AB: {
+				SBC(read(cycles, AB(cycles, memory), memory));
+			} break;
+			case INS_SBC_ABX: {
+				SBC(read(cycles, ABXcross(cycles, memory), memory));
+			} break;
+			case INS_SBC_ABY: {
+				SBC(read(cycles, ABYcross(cycles, memory), memory));
+			} break;
+			case INS_SBC_IDX: {
+				SBC(read(cycles, IDX(cycles, memory), memory));
+			} break;
+			case INS_SBC_IDY: {
+				SBC(read(cycles, IDYcross(cycles, memory), memory));
+			} break;
+			case INS_CMP_IM: {
+			    compare(A, IM(cycles, memory));
+			} break;
+			case INS_CMP_ZP: {
+			    compare(A, read(cycles, ZP(cycles, memory), memory));
+			} break;
+			case INS_CMP_ZPX: {
+			    compare(A, read(cycles, ZPX(cycles, memory), memory));
+			} break;
+			case INS_CMP_AB: {
+			    compare(A, read(cycles, AB(cycles, memory), memory));
+			} break;
+			case INS_CMP_ABX: {
+			    compare(A, read(cycles, ABXcross(cycles, memory), memory));
+			} break;
+			case INS_CMP_ABY: {
+			    compare(A, read(cycles, ABYcross(cycles, memory), memory));
+			} break;
+			case INS_CMP_IDX: {
+			    compare(A, read(cycles, IDX(cycles, memory), memory));
+			} break;
+			case INS_CMP_IDY: {
+			    compare(A, read(cycles, IDYcross(cycles, memory), memory));
+			} break;
+			case INS_CPX_IM: {
+			    compare(X, IM(cycles, memory));
+			} break;
+			case INS_CPX_ZP: {
+			    compare(X, read(cycles, ZP(cycles, memory), memory));
+			} break;
+			case INS_CPX_AB: {
+			    compare(X, read(cycles, AB(cycles, memory), memory));
+			} break;
+			case INS_CPY_IM: {
+			    compare(Y, IM(cycles, memory));
+			} break;
+			case INS_CPY_ZP: {
+			    compare(Y, read(cycles, ZP(cycles, memory), memory));
+			} break;
+			case INS_CPY_AB: {
+			    compare(Y, read(cycles, AB(cycles, memory), memory));
+			} break;
+			case INS_INC_ZP: {
+			    Word memoryLocation = ZP(cycles, memory);
 
-					Byte low = read(cycles, 0xFFFE, memory);
-					Byte high = read(cycles, 0xFFFF, memory);
+			    Byte value = read(cycles, memoryLocation, memory);
 
-					PC = low | (high << 8);
-				} break;
-				case INS_RTI_I: {
-					Byte status = pullFromStack(cycles, SP, memory);
+			    Byte result = value + 1;
 
-					Byte low = pullFromStack(cycles, SP, memory);
+			    cycles++; // modify cycle
 
-					Byte high = pullFromStack(cycles, SP, memory);
+			    write(cycles, memoryLocation, result, memory);
 
-					std::bitset<8> bits(status);
+			    setZN(result);
+			} break;
+			case INS_INC_ZPX: {
+			    Word memoryLocation = ZPX(cycles, memory);
 
-					C = bits[0];
-					Z = bits[1];
-					I = bits[2];
-					D = bits[3];
-					V = bits[6];
-					N = bits[7];
-					cycles--;
+			    Byte value = read(cycles, memoryLocation, memory);
 
-					PC = low | (static_cast<Word>(high) << 8);
+			    Byte result = value + 1;
 
-					cycles--;
-				} break;
-				case INS_ADC_IM: {
-					ADC(IM(cycles, memory));
-				} break;
-				case INS_ADC_ZP: {
-					ADC(read(cycles, ZP(cycles, memory), memory));
-				} break;
-				case INS_ADC_ZPX: {
-					ADC(read(cycles, ZPX(cycles, memory), memory));
+			    cycles++; // modify cycle
 
-				} break;
-				case INS_ADC_AB: {
-					ADC(read(cycles, AB(cycles, memory), memory));
+			    write(cycles, memoryLocation, result, memory);
 
-				} break;
-				case INS_ADC_ABX: {
-					ADC(read(cycles, ABXcross(cycles, memory), memory));
+			    setZN(result);
+			} break;
+			case INS_INC_AB: {
+			    Word memoryLocation = AB(cycles, memory);
 
-				} break;
-				case INS_ADC_ABY: {
-					ADC(read(cycles, ABYcross(cycles, memory), memory));
-				} break;
-				case INS_ADC_IDX: {
-					ADC(read(cycles, IDX(cycles, memory), memory));
-				} break;
-				case INS_ADC_IDY: {
-					ADC(read(cycles, IDYcross(cycles, memory), memory));
-				} break;
-				case INS_SBC_IM: {
-					SBC(IM(cycles, memory));
-				} break;
-				case INS_SBC_ZP: {
-					SBC(read(cycles, ZP(cycles, memory), memory));
-				} break;
-				case INS_SBC_ZPX: {
-					SBC(read(cycles, ZPX(cycles, memory), memory));
-				} break;
-				case INS_SBC_AB: {
-					SBC(read(cycles, AB(cycles, memory), memory));
-				} break;
-				case INS_SBC_ABX: {
-					SBC(read(cycles, ABXcross(cycles, memory), memory));
-				} break;
-				case INS_SBC_ABY: {
-					SBC(read(cycles, ABYcross(cycles, memory), memory));
-				} break;
-				case INS_SBC_IDX: {
-					SBC(read(cycles, IDX(cycles, memory), memory));
-				} break;
-				case INS_SBC_IDY: {
-					SBC(read(cycles, IDYcross(cycles, memory), memory));
-				} break;
-				case INS_CMP_IM: {
-				    compare(A, IM(cycles, memory), memory);
-				} break;
-				case INS_CMP_ZP: {
-				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_ZPX: {
-				    compare(A, read(cycles, ZPX(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_AB: {
-				    compare(A, read(cycles, ZPY(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_ABX: {
-				    compare(A, read(cycles, ABXcross(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_ABY: {
-				    compare(A, read(cycles, ABYcross(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_IDX: {
-				    compare(A, read(cycles, IDX(cycles, memory), memory), memory);
-				} break;
-				case INS_CMP_IDY: {
-				    compare(A, read(cycles, IDYcross(cycles, memory), memory), memory);
-				} break;
-				case INS_CPX_IM: {
-				    compare(A, IM(cycles, memory), memory);
-				} break;
-				case INS_CPX_ZP: {
-				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
-				} break;
-				case INS_CPX_AB: {
-				    compare(A, read(cycles, AB(cycles, memory), memory), memory);
-				} break;
-				case INS_CPY_IM: {
-				    compare(A, IM(cycles, memory), memory);
-				} break;
-				case INS_CPY_ZP: {
-				    compare(A, read(cycles, ZP(cycles, memory), memory), memory);
-				} break;
-				case INS_CPY_AB: {
-				    compare(A, read(cycles, AB(cycles, memory), memory), memory);
-				} break;
-				case INS_INC_ZP: {
-				    Word memoryLocation = static_cast<Word>(ZP(cycles, memory));
+			    Byte value = read(cycles, memoryLocation, memory);
 
-				    Byte value = read(cycles, memoryLocation, memory);
+			    Byte result = value + 1;
 
-				    Byte result = value + 1;
+			    cycles++;
 
-				    write(cycles, memoryLocation, result, memory);
+			    write(cycles, memoryLocation, result, memory);
 
-				    std::bitset<8> resbits(result);
-				    Z = (result == 0);
-				    N = resbits[7];
-				} break;
-				case INS_INC_ZPX: {
-				    Word memoryLocation = static_cast<Word>(ZPX(cycles, memory));
+			    setZN(result);
+			} break;
+			case INS_INC_ABX: {
+			    Word memoryLocation = ABX(cycles, memory);
 
-				    Byte value = read(cycles, memoryLocation, memory);
+			    Byte value = read(cycles, memoryLocation, memory);
 
-				    Byte result = value + 1;
+			    Byte result = value + 1;
 
-				    write(cycles, memoryLocation, result, memory);
+			    cycles++;
 
-				    std::bitset<8> resbits(result);
-				    Z = (result == 0);
-				    N = resbits[7];
-				} break;
-				case INS_INC_AB: {
-				    Word memoryLocation = AB(cycles, memory);
+			    write(cycles, memoryLocation, result, memory);
 
-				    Byte value = read(cycles, memoryLocation, memory);
+			    setZN(result);
 
-				    Byte result = value + 1;
+				cycles++;
+			} break;
+			case INS_INX_I: {
+				X += 1;
+				cycles++;
+				setZN(X);
+			} break;
+			case INS_INY_I: {
+				Y += 1;
+				cycles++;
+				setZN(Y);
+			} break;
+			case INS_DEC_ZP: {
+				Word memoryLocation = ZP(cycles, memory);
 
-				    cycles--;
+				Byte value = read(cycles, memoryLocation, memory);
 
-				    write(cycles, memoryLocation, result, memory);
+				Byte result = value - 1;
 
-				    std::bitset<8> resbits(result);
-				    Z = (result == 0);
-				    N = resbits[7];
-				} break;
-				case INS_INC_ABX: {
-				    Word memoryLocation = ABX(cycles, memory);
+				cycles++; // modify cycle
 
-				    Byte value = read(cycles, memoryLocation, memory);
+				write(cycles, memoryLocation, result, memory);
 
-				    Byte result = value + 1;
+				setZN(result);
+			} break;
+			case INS_DEC_ZPX: {
+				Word memoryLocation = ZPX(cycles, memory);
 
-				    cycles--;
+				Byte value = read(cycles, memoryLocation, memory);
 
-				    write(cycles, memoryLocation, result, memory);
+				Byte result = value - 1;
 
-				    std::bitset<8> resbits(result);
+				cycles++; // modify cycle
 
-				    cycles--;
-				    Z = (result == 0);
-				    N = resbits[7];
-				} break;
-				default: {
-					std::cout << "Instruction Not Handled!!! OH GOD!!!!! KJJHKHJHJHJGHGHKGJHKHGJK!!!!!!";
-					cycles = 0;
-				} break;
+				write(cycles, memoryLocation, result, memory);
 
-			}
+				setZN(result);
+			} break;
+			case INS_DEC_AB: {
+				Word memoryLocation = AB(cycles, memory);
+
+				Byte value = read(cycles, memoryLocation, memory);
+
+				Byte result = value - 1;
+
+				cycles++; // modify cycle
+
+				write(cycles, memoryLocation, result, memory);
+
+				setZN(result);
+			} break;
+			case INS_DEC_ABX: {
+				Word memoryLocation = ABX(cycles, memory);
+
+				Byte value = read(cycles, memoryLocation, memory);
+
+				Byte result = value - 1;
+
+				cycles++; // modify cycle
+
+				write(cycles, memoryLocation, result, memory);
+
+				setZN(result);
+
+				cycles++; // fixed page-cross cycle for indexed RMW
+			} break;
+			case INS_DEX_I: {
+				X -= 1;
+				cycles++;
+				setZN(X);
+			} break;
+			case INS_DEY_I: {
+				Y -= 1;
+				cycles++;
+				setZN(Y);
+			} break;
+			case INS_BCC_REL: {
+				branchIf(cycles, C, false, memory);
+			} break;
+			case INS_BCS_REL: {
+				branchIf(cycles, C, true, memory);
+			} break;
+			case INS_BEQ_REL: {
+				branchIf(cycles, Z, true, memory);
+			} break;
+			case INS_BMI_REL: {
+				branchIf(cycles, N, true, memory);
+			} break;
+			case INS_BNE_REL: {
+				branchIf(cycles, Z, false, memory);
+			} break;
+			case INS_BPL_REL: {
+				branchIf(cycles, N, false, memory);
+			} break;
+			case INS_BVC_REL: {
+				branchIf(cycles, V, false, memory);
+			} break;
+			case INS_BVS_REL: {
+				branchIf(cycles, V, true, memory);
+			} break;
+			case INS_CLC_I: {
+				C = 0;
+				cycles++;
+			} break;
+
+			case INS_SEC_I: {
+				C = 1;
+				cycles++;
+			} break;
+
+			case INS_CLD_I: {
+				D = 0;
+				cycles++;
+			} break;
+
+			case INS_SED_I: {
+				D = 1;
+				cycles++;
+			} break;
+
+			case INS_CLI_I: {
+				I = 0;
+				cycles++;
+			} break;
+
+			case INS_SEI_I: {
+				I = 1;
+				cycles++;
+			} break;
+
+			case INS_CLV_I: {
+				V = 0;
+				cycles++;
+			} break;
+			default: {
+				std::cout << "Instruction Not Handled: " << std::hex << static_cast<int>(opcode) << std::endl;
+			} break;
+
+
 		}
 
-
+		return cycles;
 	}
 
 };
 
-// "Static" key word does not allow it to store a massive amount of data on the stack (C6262 error)
 static MEM mem;
-CPU cpu;
+static CPU cpu;
 
 int main() {
-
 	cpu.powerOn(mem);
 
-    cpu.A = 0x80;
-    cpu.X = 0x00;
-    mem[0x1234] = 0x09;
 
-	mem[0x8000] = CPU::INS_INC_ABX;
-	mem[0x8001] = 0x34;
-	mem[0x8002] = 0x12;
+	cpu.execute(mem);
 
-
-    cpu.execute(7, mem);
-    std::cout << static_cast<int>(mem[0x1234]) << std::endl;
-    std::cout << static_cast<int>(cpu.Z) << std::endl;
-    std::cout << static_cast<int>(cpu.N) << std::endl;
 	return 0;
 }
